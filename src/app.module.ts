@@ -16,6 +16,7 @@ import { CommonModule } from './common/common.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { AppLogger } from './common/services/app-logger.service';
 
 @Module({
   imports: [
@@ -61,6 +62,10 @@ import { GlobalExceptionFilter } from './common/filters/global-exception.filter'
   controllers: [AppController],
   providers: [
     AppService,
+    {
+      provide: AppLogger,
+      useFactory: (): AppLogger => new AppLogger('AppModule'),
+    },
     {
       provide: APP_FILTER,
       useClass: GlobalExceptionFilter,
