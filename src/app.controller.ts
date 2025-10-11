@@ -26,10 +26,16 @@ export class AppController {
           description: 'Overall system health status',
         },
         timestamp: { type: 'string', format: 'date-time', description: 'Current timestamp' },
+        startupTimestamp: {
+          type: 'string',
+          format: 'date-time',
+          description: 'Application startup timestamp',
+        },
         environment: {
           type: 'string',
           description: 'Current environment (local, dev, stg, prd, etc.)',
         },
+        commitId: { type: 'string', description: 'Git commit ID from deployment' },
         checks: {
           type: 'object',
           properties: {
@@ -64,7 +70,9 @@ export class AppController {
       example: {
         status: 'healthy',
         timestamp: '2025-01-11T10:30:00.000Z',
+        startupTimestamp: '2025-01-11T09:30:00.000Z',
         environment: 'local',
+        commitId: 'a0846b9',
         checks: {
           database: {
             status: 'up',
@@ -81,5 +89,12 @@ export class AppController {
   })
   async getHealth(): Promise<HealthCheckResponse> {
     return await this.appService.getHealth();
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'Welcome message' })
+  @ApiResponse({ status: 200, description: 'Returns welcome message' })
+  getHello(): string {
+    return this.appService.getHello();
   }
 }

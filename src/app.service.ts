@@ -1,3 +1,5 @@
+import { execSync } from 'child_process';
+
 import { Injectable, Inject } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
@@ -9,7 +11,9 @@ import { AppLogger } from '~/common/services/app-logger.service';
 export interface HealthCheckResponse {
   status: 'healthy' | 'unhealthy' | 'degraded';
   timestamp: string;
+  startupTimestamp: string;
   environment: string;
+  commitId: string;
   checks: {
     database: HealthCheckDetail;
     redis: HealthCheckDetail;
@@ -26,7 +30,9 @@ export interface HealthCheckDetail {
 @Injectable()
 export class AppService {
   private readonly startTime: number;
+  private readonly startupTimestamp: string;
   private readonly logger: AppLogger;
+  private commitId: string = 'unknown';
 
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
@@ -34,7 +40,13 @@ export class AppService {
     logger: AppLogger,
   ) {
     this.startTime = Date.now();
+    this.startupTimestamp = new Date().toISOString();
     this.logger = logger.forClass('AppService');
+    this.loadCommitId();
+  }
+
+  getHello(): string {
+    return 'Welcome to Ilyrium Dynamic Pricing API';
   }
 
   async getHealth(): Promise<HealthCheckResponse> {
@@ -64,13 +76,30 @@ export class AppService {
     return {
       status,
       timestamp,
+      startupTimestamp: this.startupTimestamp,
       environment,
+      commitId: this.commitId,
       checks: {
         database: databaseCheck,
         redis: redisCheck,
       },
       uptime,
     };
+  }
+
+  private loadCommitId(): void {
+    try {
+      // Get the current Git commit hash
+      const commitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+      this.commitId = commitHash || 'unknown';
+      this.logger.debug('Loaded commit ID', { commitId: this.commitId });
+    } catch (error) {
+      this.logger.warn('Failed to load commit ID from git', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      // Fallback to environment variable
+      this.commitId = process.env.GIT_COMMIT_ID || process.env.COMMIT_SHA || 'unknown';
+    }
   }
 
   private async checkDatabase(): Promise<HealthCheckDetail> {

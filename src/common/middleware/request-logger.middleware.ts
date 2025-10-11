@@ -5,7 +5,9 @@ import { AppLogger } from '~/common/services/app-logger.service';
 
 @Injectable()
 export class RequestLoggerMiddleware implements NestMiddleware {
-  constructor(private readonly logger: AppLogger) {}
+  constructor(private readonly logger: AppLogger) {
+    logger.forClass(RequestLoggerMiddleware.name);
+  }
 
   use(req: Request, res: Response, next: NextFunction): void {
     const { method, originalUrl, headers } = req;
