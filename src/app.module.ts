@@ -9,11 +9,18 @@ import { AppConfig } from '~/config/app.config';
 import { DatabaseConfig } from '~/config/database.config';
 import { RedisConfig } from '~/config/redis.config';
 import { MonitoringConfig } from '~/config/monitoring.config';
+import solanaConfig from '~/config/solana.config';
+import telegramConfig from '~/config/telegram.config';
+import paymentConfig from '~/config/payment.config';
+import apiKeyConfig from '~/config/api-key.config';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CommonModule } from './common/common.module';
 import { PricingModule } from './modules/pricing/pricing.module';
+import { PaymentModule } from './modules/payment/payment.module';
+import { ApiKeyModule } from './modules/api-key/api-key.module';
+import { TelegramBotModule } from './modules/telegram-bot/telegram-bot.module';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { AppLogger } from './common/services/app-logger.service';
@@ -23,7 +30,16 @@ import { AppLogger } from './common/services/app-logger.service';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ['.env'],
-      load: [AppConfig, DatabaseConfig, RedisConfig, MonitoringConfig],
+      load: [
+        AppConfig,
+        DatabaseConfig,
+        RedisConfig,
+        MonitoringConfig,
+        solanaConfig,
+        telegramConfig,
+        paymentConfig,
+        apiKeyConfig,
+      ],
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -58,6 +74,9 @@ import { AppLogger } from './common/services/app-logger.service';
     }),
     CommonModule,
     PricingModule,
+    PaymentModule,
+    ApiKeyModule,
+    TelegramBotModule,
   ],
   controllers: [AppController],
   providers: [

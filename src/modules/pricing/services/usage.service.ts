@@ -68,4 +68,46 @@ export class UsageService {
       },
     };
   }
+
+  async getActivePurchases(userId: string): Promise<Purchase[]> {
+    return await this.purchaseRepository.find({
+      where: {
+        userId,
+        isActive: true,
+        expiresAt: MoreThanOrEqual(new Date()),
+      },
+      order: {
+        createdAt: 'DESC',
+      },
+    });
+  }
+
+  async getUserUsage(
+    _userId: string,
+    days: number | null,
+  ): Promise<{ totalRequests: number; cachedRequests: number }> {
+    let dateFilter = {};
+
+    if (days !== null) {
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      dateFilter = { createdAt: MoreThanOrEqual(startDate) };
+    }
+
+    const walletAddresses = ['telegram-user'];
+
+    const usageMetrics = await this.usageMetricsRepository.find({
+      where: {
+        walletAddress: walletAddresses[0],
+        ...dateFilter,
+      },
+    });
+
+    const totalRequests = usageMetrics.reduce((sum, m) => sum + m.requestCount, 0);
+
+    return {
+      totalRequests,
+      cachedRequests: 0,
+    };
+  }
 }

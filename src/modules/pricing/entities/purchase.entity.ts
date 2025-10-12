@@ -9,10 +9,17 @@ import {
 
 @Entity('purchases')
 @Index(['walletAddress'])
+@Index(['userId'])
 @Index(['isActive'])
 export class Purchase {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({ name: 'user_id', type: 'uuid', nullable: true })
+  userId?: string;
+
+  @Column({ name: 'payment_attempt_id', type: 'uuid', nullable: true })
+  paymentAttemptId?: string;
 
   @Column({ name: 'wallet_address' })
   walletAddress: string;

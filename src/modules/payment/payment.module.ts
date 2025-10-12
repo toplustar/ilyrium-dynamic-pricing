@@ -1,0 +1,39 @@
+import { Module, forwardRef } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
+
+import { AppLogger } from '~/common/services/app-logger.service';
+import solanaConfig from '~/config/solana.config';
+import paymentConfig from '~/config/payment.config';
+
+import { Purchase } from '../pricing/entities/purchase.entity';
+import { PricingModule } from '../pricing/pricing.module';
+
+import { PaymentAttempt } from './entities/payment-attempt.entity';
+import { PaymentTransaction } from './entities/payment-transaction.entity';
+import { SolanaService } from './services/solana.service';
+import { PaymentService } from './services/payment.service';
+import { TransactionMonitorService } from './services/transaction-monitor.service';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([PaymentAttempt, PaymentTransaction, Purchase]),
+    ConfigModule.forFeature(solanaConfig),
+    ConfigModule.forFeature(paymentConfig),
+    ScheduleModule.forRoot(),
+    PricingModule,
+    forwardRef(() => import('../telegram-bot/telegram-bot.module').then(m => m.TelegramBotModule)),
+  ],
+  providers: [
+    {
+      provide: AppLogger,
+      useFactory: (): AppLogger => new AppLogger('PaymentModule'),
+    },
+    SolanaService,
+    PaymentService,
+    TransactionMonitorService,
+  ],
+  exports: [SolanaService, PaymentService, TransactionMonitorService],
+})
+export class PaymentModule {}

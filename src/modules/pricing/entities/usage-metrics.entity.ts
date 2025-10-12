@@ -9,10 +9,14 @@ import {
 
 @Entity('usage_metrics')
 @Index(['walletAddress'])
+@Index(['apiKeyId'])
 @Index(['createdAt'])
 export class UsageMetrics {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({ name: 'api_key_id', type: 'uuid', nullable: true })
+  apiKeyId?: string;
 
   @Column({ name: 'wallet_address' })
   walletAddress: string;
