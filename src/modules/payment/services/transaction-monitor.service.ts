@@ -49,6 +49,24 @@ export class TransactionMonitorService implements OnModuleInit {
   }
 
   /**
+   * Manual trigger for monitoring
+   */
+  async triggerManualCheck(): Promise<void> {
+    this.logger.log('Manual transaction check triggered');
+    await this.monitorTransactions();
+  }
+
+  /**
+   * Health check for the monitor service
+   */
+  healthCheck(): { isRunning: boolean; lastCheck: Date } {
+    return {
+      isRunning: !this.isMonitoring,
+      lastCheck: new Date(),
+    };
+  }
+
+  /**
    * Check all pending payment attempts for new transactions
    */
   private async checkPendingPayments(): Promise<void> {
@@ -116,23 +134,5 @@ export class TransactionMonitorService implements OnModuleInit {
         );
       }
     }
-  }
-
-  /**
-   * Manual trigger for monitoring
-   */
-  async triggerManualCheck(): Promise<void> {
-    this.logger.log('Manual transaction check triggered');
-    await this.monitorTransactions();
-  }
-
-  /**
-   * Health check for the monitor service
-   */
-  async healthCheck(): Promise<{ isRunning: boolean; lastCheck: Date }> {
-    return {
-      isRunning: !this.isMonitoring,
-      lastCheck: new Date(),
-    };
   }
 }

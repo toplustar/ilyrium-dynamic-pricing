@@ -4,12 +4,13 @@ import { Context, Telegraf } from 'telegraf';
 import { Update } from 'telegraf/typings/core/types/typegram';
 
 import { AppLogger } from '~/common/services/app-logger.service';
-import { TelegramUserService } from './telegram-user.service';
-import { KeyboardBuilderService } from './keyboard-builder.service';
 import { PaymentService } from '~/modules/payment/services/payment.service';
 import { PricingEngineService } from '~/modules/pricing/services/pricing-engine.service';
 import { ApiKeyService } from '~/modules/api-key/services/api-key.service';
 import { UsageService } from '~/modules/pricing/services/usage.service';
+
+import { KeyboardBuilderService } from './keyboard-builder.service';
+import { TelegramUserService } from './telegram-user.service';
 
 @Injectable()
 export class TelegramBotService implements OnModuleInit {
@@ -42,11 +43,27 @@ export class TelegramBotService implements OnModuleInit {
     this.setupCallbackHandlers();
     this.setupMessageHandlers();
 
-    this.bot.launch();
+    void this.bot.launch();
     this.logger.log('Telegram bot started successfully');
 
     process.once('SIGINT', () => this.bot.stop('SIGINT'));
     process.once('SIGTERM', () => this.bot.stop('SIGTERM'));
+  }
+
+  async sendNotification(telegramId: string, message: string): Promise<void> {
+    try {
+      await this.bot.telegram.sendMessage(telegramId, message, {
+        parse_mode: 'Markdown',
+      });
+      this.logger.debug('Notification sent', { telegramId });
+    } catch (error) {
+      this.logger.error(
+        'NotificationError',
+        `Failed to send notification to ${telegramId}`,
+        {},
+        error as Error,
+      );
+    }
   }
 
   private setupCommands(): void {
@@ -92,7 +109,12 @@ export class TelegramBotService implements OnModuleInit {
       const firstName = ctx.from.first_name;
       const lastName = ctx.from.last_name;
 
-      const user = await this.telegramUserService.findOrCreate(telegramId, username, firstName, lastName);
+      const user = await this.telegramUserService.findOrCreate(
+        telegramId,
+        username,
+        firstName,
+        lastName,
+      );
 
       const welcomeMessage = `
 🎉 *Welcome to Ilyrium Dynamic RPC Pricing Bot!*
@@ -172,7 +194,12 @@ Please select the duration:
 
       await ctx.answerCbQuery();
     } catch (error) {
-      this.logger.error('TierSelectionError', 'Failed to handle tier selection', {}, error as Error);
+      this.logger.error(
+        'TierSelectionError',
+        'Failed to handle tier selection',
+        {},
+        error as Error,
+      );
       await ctx.answerCbQuery('Failed to process selection');
     }
   }
@@ -192,7 +219,7 @@ Please select the duration:
 
       const payment = await this.paymentService.createPaymentAttempt({
         userId: user.id,
-        tier: tier as any,
+        tier: tier,
         duration,
       });
 
@@ -298,7 +325,7 @@ Status: ${this.getStatusEmoji(payment.status)} *${payment.status}*
 Amount Paid: *${payment.amountPaid}/${payment.amountExpected} USDC*
 Expires: ${payment.expiresAt.toLocaleString()}
 
-${payment.status === 'COMPLETED' ? '✅ Your access is now active!' : '⏳ Waiting for payment confirmation...'}
+${String(payment.status) === 'COMPLETED' ? '✅ Your access is now active!' : '⏳ Waiting for payment confirmation...'}
       `.trim();
 
       await ctx.editMessageText(statusMessage, {
@@ -330,7 +357,7 @@ ${payment.status === 'COMPLETED' ? '✅ Your access is now active!' : '⏳ Waiti
         return;
       }
 
-      const totalRps = purchases.reduce((sum: number, p) => sum + p.rpsAllocated, 0);
+      const totalRps = purchases.reduce((sum: number, p) => sum + Number(p.rpsAllocated), 0);
 
       let message = `💰 *Your RPS Balance*\n\n`;
       message += `Total Allocated RPS: *${totalRps}*\n\n`;
@@ -420,12 +447,13 @@ Key Details:
 
       const sentMessage = await ctx.reply(message, { parse_mode: 'Markdown' });
 
-      setTimeout(async () => {
-        try {
-          await ctx.telegram.deleteMessage(ctx.chat.id, sentMessage.message_id);
-        } catch (error) {
-          this.logger.warn('Failed to delete API key message', { error });
-        }
+      // Schedule message deletion after 60 seconds
+      setTimeout((): void => {
+        void ctx.telegram
+          .deleteMessage(ctx.chat.id, sentMessage.message_id)
+          .catch((error: Error) => {
+            this.logger.warn('Failed to delete API key message', { error });
+          });
       }, 60000);
 
       this.logger.log('API key created via bot', {
@@ -601,17 +629,6 @@ Need help? Contact support: @your_support
     `.trim();
 
     await ctx.reply(helpMessage, { parse_mode: 'Markdown' });
-  }
-
-  async sendNotification(telegramId: string, message: string): Promise<void> {
-    try {
-      await this.bot.telegram.sendMessage(telegramId, message, {
-        parse_mode: 'Markdown',
-      });
-      this.logger.debug('Notification sent', { telegramId });
-    } catch (error) {
-      this.logger.error('NotificationError', `Failed to send notification to ${telegramId}`, {}, error as Error);
-    }
   }
 
   private getTierEmoji(tier: string): string {

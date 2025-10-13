@@ -73,7 +73,7 @@ export class SolanaService {
           }
 
           // Add small delay to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await this.sleep(100);
         } catch (error) {
           this.logger.warn(`Failed to parse transaction ${signatureInfo.signature}`, {
             error: error instanceof Error ? error.message : 'Unknown error',
@@ -91,6 +91,69 @@ export class SolanaService {
         error as Error,
       );
       throw error;
+    }
+  }
+
+  /**
+   * Verify a specific transaction signature
+   */
+  async verifyTransaction(signature: string): Promise<SolanaTransaction | null> {
+    try {
+      this.logger.debug(`Verifying transaction: ${signature}`);
+
+      const signatureInfo: ConfirmedSignatureInfo = {
+        signature,
+        slot: 0,
+        err: null,
+        memo: null,
+        blockTime: null,
+      };
+
+      const transaction = await this.parseTransaction(signatureInfo, '');
+
+      if (transaction && transaction.confirmations >= this.requiredConfirmations) {
+        this.logger.log('Transaction verified', {
+          signature,
+          confirmations: transaction.confirmations,
+        });
+        return transaction;
+      }
+
+      return null;
+    } catch (error) {
+      this.logger.error(
+        'TransactionVerificationError',
+        `Failed to verify transaction: ${signature}`,
+        {},
+        error as Error,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Get current slot height
+   */
+  async getCurrentSlot(): Promise<number> {
+    return await this.connection.getSlot();
+  }
+
+  /**
+   * Check if connection is healthy
+   */
+  async healthCheck(): Promise<boolean> {
+    try {
+      const version = await this.connection.getVersion();
+      this.logger.debug('Solana connection healthy', { version });
+      return true;
+    } catch (error) {
+      this.logger.error(
+        'SolanaHealthCheckError',
+        'Failed to connect to Solana',
+        {},
+        error as Error,
+      );
+      return false;
     }
   }
 
@@ -171,7 +234,7 @@ export class SolanaService {
             info.mint === this.usdcMint.toBase58() &&
             info.destination === this.paymentWallet.toBase58()
           ) {
-            const amount = info.tokenAmount?.uiAmount || info.amount / 1_000_000;
+            const amount = (info.tokenAmount?.uiAmount as number | undefined) || info.amount / 1_000_000;
             return amount;
           }
         }
@@ -179,6 +242,15 @@ export class SolanaService {
     }
 
     return 0;
+  }
+
+  /**
+   * Helper method to sleep for a given number of milliseconds
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => {
+      setTimeout(resolve, ms);
+    });
   }
 
   /**
@@ -190,68 +262,5 @@ export class SolanaService {
       return accountKeys[0].pubkey.toBase58();
     }
     return null;
-  }
-
-  /**
-   * Verify a specific transaction signature
-   */
-  async verifyTransaction(signature: string): Promise<SolanaTransaction | null> {
-    try {
-      this.logger.debug(`Verifying transaction: ${signature}`);
-
-      const signatureInfo: ConfirmedSignatureInfo = {
-        signature,
-        slot: 0,
-        err: null,
-        memo: null,
-        blockTime: null,
-      };
-
-      const transaction = await this.parseTransaction(signatureInfo, '');
-
-      if (transaction && transaction.confirmations >= this.requiredConfirmations) {
-        this.logger.log('Transaction verified', {
-          signature,
-          confirmations: transaction.confirmations,
-        });
-        return transaction;
-      }
-
-      return null;
-    } catch (error) {
-      this.logger.error(
-        'TransactionVerificationError',
-        `Failed to verify transaction: ${signature}`,
-        {},
-        error as Error,
-      );
-      return null;
-    }
-  }
-
-  /**
-   * Get current slot height
-   */
-  async getCurrentSlot(): Promise<number> {
-    return await this.connection.getSlot();
-  }
-
-  /**
-   * Check if connection is healthy
-   */
-  async healthCheck(): Promise<boolean> {
-    try {
-      const version = await this.connection.getVersion();
-      this.logger.debug('Solana connection healthy', { version });
-      return true;
-    } catch (error) {
-      this.logger.error(
-        'SolanaHealthCheckError',
-        'Failed to connect to Solana',
-        {},
-        error as Error,
-      );
-      return false;
-    }
   }
 }

@@ -42,7 +42,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
@@ -59,7 +59,7 @@ jobs:
           DATABASE_SYNC: false
           REDIS_HOST: localhost
           REDIS_PORT: 6379
-          REDIS_PASSWORD: ""
+          REDIS_PASSWORD: ''
         run: |
           # Create test script if it doesn't exist
           if grep -q '"test":' package.json; then
@@ -70,14 +70,17 @@ jobs:
 
       - name: Test database migrations
         env:
-          DATABASE_HOST: localhost
-          DATABASE_PORT: 5432
-          DATABASE_USER: postgres
-          DATABASE_PASSWORD: postgres
-          DATABASE_NAME: ilyrium_test
-          DATABASE_SYNC: false
+          NODE_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+          DB_NAME: ilyrium_test
+          DB_SYNC: false
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          REDIS_PASSWORD: ''
         run: |
           echo "Testing database migrations..."
           npm run db:migration:run
           echo "✓ Migrations completed successfully"
-
