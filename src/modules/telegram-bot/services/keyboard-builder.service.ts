@@ -81,7 +81,9 @@ export class KeyboardBuilderService {
    * Build key revocation selection keyboard
    */
   buildKeyRevocationList(keys: Array<{ id: string; name: string; prefix: string }>): any {
-    const buttons = keys.map(key => [Markup.button.callback(`🗑️ ${key.name || key.prefix}`, `revoke:${key.id}`)]);
+    const buttons = keys.map(key => [
+      Markup.button.callback(`🗑️ ${key.name || key.prefix}`, `revoke:${key.id}`),
+    ]);
 
     buttons.push([Markup.button.callback('« Cancel', 'back:keys')]);
 
@@ -94,7 +96,10 @@ export class KeyboardBuilderService {
   buildUsagePeriodSelection(): any {
     return Markup.inlineKeyboard([
       [Markup.button.callback('Today', 'usage:1'), Markup.button.callback('7 Days', 'usage:7')],
-      [Markup.button.callback('30 Days', 'usage:30'), Markup.button.callback('All Time', 'usage:all')],
+      [
+        Markup.button.callback('30 Days', 'usage:30'),
+        Markup.button.callback('All Time', 'usage:all'),
+      ],
       [Markup.button.callback('« Back', 'back:main')],
     ]);
   }

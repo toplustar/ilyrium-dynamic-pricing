@@ -56,8 +56,8 @@ services:
         condition: service_healthy
     command: >
       sh -c "
-        npx prisma migrate deploy &&
-        node dist/index.js
+        npm run db:migration:run &&
+        node dist/main.js
       "
 
 volumes:

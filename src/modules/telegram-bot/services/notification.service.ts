@@ -1,9 +1,10 @@
 import { Injectable, OnModuleInit, Inject, forwardRef } from '@nestjs/common';
 
 import { AppLogger } from '~/common/services/app-logger.service';
+import { PaymentService } from '~/modules/payment/services/payment.service';
+
 import { TelegramBotService } from './telegram-bot.service';
 import { TelegramUserService } from './telegram-user.service';
-import { PaymentService } from '~/modules/payment/services/payment.service';
 
 @Injectable()
 export class NotificationService implements OnModuleInit {
@@ -23,7 +24,11 @@ export class NotificationService implements OnModuleInit {
     this.paymentService.setNotificationService(this);
   }
 
-  async notifyPaymentReceived(userId: string, amount: number, remainingAmount: number): Promise<void> {
+  async notifyPaymentReceived(
+    userId: string,
+    amount: number,
+    remainingAmount: number,
+  ): Promise<void> {
     try {
       const user = await this.telegramUserService.getUserById(userId);
       if (!user) {
@@ -44,11 +49,21 @@ ${remainingAmount === 0 ? 'Your access is now active! Use /createkey to generate
 
       this.logger.log('Payment notification sent', { userId, amount });
     } catch (error) {
-      this.logger.error('PaymentNotificationError', 'Failed to send payment notification', { userId }, error as Error);
+      this.logger.error(
+        'PaymentNotificationError',
+        'Failed to send payment notification',
+        { userId },
+        error as Error,
+      );
     }
   }
 
-  async notifyPurchaseComplete(userId: string, tier: string, rpsAllocated: number, expiresAt: Date): Promise<void> {
+  async notifyPurchaseComplete(
+    userId: string,
+    tier: string,
+    rpsAllocated: number,
+    expiresAt: Date,
+  ): Promise<void> {
     try {
       const user = await this.telegramUserService.getUserById(userId);
       if (!user) {
@@ -72,7 +87,12 @@ Use /createkey to generate your API key.
 
       this.logger.log('Purchase notification sent', { userId, tier, rpsAllocated });
     } catch (error) {
-      this.logger.error('PurchaseNotificationError', 'Failed to send purchase notification', { userId }, error as Error);
+      this.logger.error(
+        'PurchaseNotificationError',
+        'Failed to send purchase notification',
+        { userId },
+        error as Error,
+      );
     }
   }
 
@@ -94,7 +114,12 @@ Use /createkey to generate a new key before this one expires.
 
       this.logger.log('Key expiry notification sent', { userId, keyPrefix, daysRemaining });
     } catch (error) {
-      this.logger.error('KeyExpiryNotificationError', 'Failed to send key expiry notification', { userId }, error as Error);
+      this.logger.error(
+        'KeyExpiryNotificationError',
+        'Failed to send key expiry notification',
+        { userId },
+        error as Error,
+      );
     }
   }
 
@@ -116,7 +141,12 @@ Use /buy to renew your access before it expires.
 
       this.logger.log('Purchase expiry notification sent', { userId, tier, daysRemaining });
     } catch (error) {
-      this.logger.error('PurchaseExpiryNotificationError', 'Failed to send purchase expiry notification', { userId }, error as Error);
+      this.logger.error(
+        'PurchaseExpiryNotificationError',
+        'Failed to send purchase expiry notification',
+        { userId },
+        error as Error,
+      );
     }
   }
 }

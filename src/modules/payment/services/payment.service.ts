@@ -33,7 +33,15 @@ export class PaymentService {
   private readonly logger: AppLogger;
   private readonly memoExpiryDays: number;
   private readonly paymentWallet: string;
-  private notificationService?: any;
+  private notificationService?: {
+    notifyPaymentReceived: (userId: string, amount: number, remaining: number) => Promise<void>;
+    notifyPurchaseComplete: (
+      userId: string,
+      tier: string,
+      rps: number,
+      expiresAt: Date,
+    ) => Promise<void>;
+  };
 
   constructor(
     @InjectRepository(PaymentAttempt)
@@ -51,7 +59,15 @@ export class PaymentService {
     this.paymentWallet = this.configService.get<string>('solana.paymentWallet', '');
   }
 
-  setNotificationService(service: any): void {
+  setNotificationService(service: {
+    notifyPaymentReceived: (userId: string, amount: number, remaining: number) => Promise<void>;
+    notifyPurchaseComplete: (
+      userId: string,
+      tier: string,
+      rps: number,
+      expiresAt: Date,
+    ) => Promise<void>;
+  }): void {
     this.notificationService = service;
   }
 
@@ -62,7 +78,7 @@ export class PaymentService {
     this.logger.log('Creating payment attempt', { userId: dto.userId, tier: dto.tier });
 
     const tiers = this.pricingEngineService.getTiers();
-    const tierInfo = tiers.find(t => t.name === dto.tier);
+    const tierInfo = tiers.find(t => t.name === String(dto.tier));
 
     if (!tierInfo) {
       throw new HttpException('Invalid tier', HttpStatus.BAD_REQUEST);
@@ -119,36 +135,6 @@ export class PaymentService {
   }
 
   /**
-   * Generate a unique 10-character alphanumeric memo
-   */
-  private async generateUniqueMemo(): Promise<string> {
-    const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    let attempts = 0;
-    const maxAttempts = 10;
-
-    while (attempts < maxAttempts) {
-      const memo = nanoid(10)
-        .replace(/[^A-Za-z0-9]/g, '')
-        .toUpperCase()
-        .slice(0, 10);
-
-      const paddedMemo = memo.padEnd(10, alphabet[Math.floor(Math.random() * alphabet.length)]);
-
-      const existing = await this.paymentAttemptRepository.findOne({
-        where: { memo: paddedMemo },
-      });
-
-      if (!existing) {
-        return paddedMemo;
-      }
-
-      attempts++;
-    }
-
-    throw new HttpException('Failed to generate unique memo', HttpStatus.INTERNAL_SERVER_ERROR);
-  }
-
-  /**
    * Record a payment transaction
    */
   async recordTransaction(
@@ -201,7 +187,11 @@ export class PaymentService {
 
     if (this.notificationService) {
       const remainingAmount = paymentAttempt.amountExpected - paymentAttempt.amountPaid;
-      await this.notificationService.notifyPaymentReceived(paymentAttempt.userId, amount, remainingAmount);
+      await this.notificationService.notifyPaymentReceived(
+        paymentAttempt.userId,
+        amount,
+        remainingAmount,
+      );
     }
 
     this.logger.log('Transaction recorded', {
@@ -209,56 +199,6 @@ export class PaymentService {
       amountPaid: paymentAttempt.amountPaid,
       amountExpected: paymentAttempt.amountExpected,
       status: paymentAttempt.status,
-    });
-  }
-
-  /**
-   * Complete the purchase after payment is verified
-   */
-  private async completePurchase(paymentAttempt: PaymentAttempt): Promise<void> {
-    this.logger.log('Completing purchase', { paymentAttemptId: paymentAttempt.id });
-
-    const tiers = this.pricingEngineService.getTiers();
-    const tierInfo = tiers.find(t => t.name === paymentAttempt.tier);
-
-    if (!tierInfo) {
-      throw new HttpException('Invalid tier', HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + paymentAttempt.duration);
-
-    const purchase = this.purchaseRepository.create({
-      userId: paymentAttempt.userId,
-      paymentAttemptId: paymentAttempt.id,
-      walletAddress: 'telegram-user',
-      tier: paymentAttempt.tier,
-      rpsAllocated: tierInfo.rps,
-      price: paymentAttempt.amountPaid,
-      duration: paymentAttempt.duration,
-      expiresAt,
-      isActive: true,
-    });
-
-    await this.purchaseRepository.save(purchase);
-
-    await this.pricingEngineService.updateUtilization(tierInfo.rps);
-
-    if (this.notificationService) {
-      await this.notificationService.notifyPurchaseComplete(
-        paymentAttempt.userId,
-        paymentAttempt.tier,
-        tierInfo.rps,
-        expiresAt,
-      );
-    }
-
-    this.logger.log('Purchase completed', {
-      purchaseId: purchase.id,
-      userId: paymentAttempt.userId,
-      tier: paymentAttempt.tier,
-      rps: tierInfo.rps,
-      expiresAt,
     });
   }
 
@@ -319,6 +259,86 @@ export class PaymentService {
       where: { userId },
       order: { createdAt: 'DESC' },
       take: 10,
+    });
+  }
+
+  /**
+   * Generate a unique 10-character alphanumeric memo
+   */
+  private async generateUniqueMemo(): Promise<string> {
+    const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    let attempts = 0;
+    const maxAttempts = 10;
+
+    while (attempts < maxAttempts) {
+      const memo = nanoid(10)
+        .replace(/[^A-Za-z0-9]/g, '')
+        .toUpperCase()
+        .slice(0, 10);
+
+      const paddedMemo = memo.padEnd(10, alphabet[Math.floor(Math.random() * alphabet.length)]);
+
+      const existing = await this.paymentAttemptRepository.findOne({
+        where: { memo: paddedMemo },
+      });
+
+      if (!existing) {
+        return paddedMemo;
+      }
+
+      attempts++;
+    }
+
+    throw new HttpException('Failed to generate unique memo', HttpStatus.INTERNAL_SERVER_ERROR);
+  }
+
+  /**
+   * Complete the purchase after payment is verified
+   */
+  private async completePurchase(paymentAttempt: PaymentAttempt): Promise<void> {
+    this.logger.log('Completing purchase', { paymentAttemptId: paymentAttempt.id });
+
+    const tiers = this.pricingEngineService.getTiers();
+    const tierInfo = tiers.find(t => t.name === paymentAttempt.tier);
+
+    if (!tierInfo) {
+      throw new HttpException('Invalid tier', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + paymentAttempt.duration);
+
+    const purchase = this.purchaseRepository.create({
+      userId: paymentAttempt.userId,
+      paymentAttemptId: paymentAttempt.id,
+      walletAddress: 'telegram-user',
+      tier: paymentAttempt.tier,
+      rpsAllocated: tierInfo.rps,
+      price: paymentAttempt.amountPaid,
+      duration: paymentAttempt.duration,
+      expiresAt,
+      isActive: true,
+    });
+
+    await this.purchaseRepository.save(purchase);
+
+    await this.pricingEngineService.updateUtilization(tierInfo.rps);
+
+    if (this.notificationService) {
+      await this.notificationService.notifyPurchaseComplete(
+        paymentAttempt.userId,
+        paymentAttempt.tier,
+        tierInfo.rps,
+        expiresAt,
+      );
+    }
+
+    this.logger.log('Purchase completed', {
+      purchaseId: purchase.id,
+      userId: paymentAttempt.userId,
+      tier: paymentAttempt.tier,
+      rps: tierInfo.rps,
+      expiresAt,
     });
   }
 }
