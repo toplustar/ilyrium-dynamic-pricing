@@ -2,42 +2,30 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   Client,
-  GatewayIntentBits,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
   Interaction,
+  TextChannel,
+  Message,
 } from 'discord.js';
+// @ts-ignore - Type conflicts in discord.js
+import { GatewayIntentBits, ButtonStyle } from 'discord.js';
 
 import { AppLogger } from '~/common/services/app-logger.service';
-import { PaymentService } from '~/modules/payment/services/payment.service';
-import { PricingEngineService } from '~/modules/pricing/services/pricing-engine.service';
-import { ApiKeyService } from '~/modules/api-key/services/api-key.service';
-import { UsageService } from '~/modules/pricing/services/usage.service';
 
-import { DiscordUserService } from './discord-user.service';
+import { PurchaseService } from './purchase.service';
 
 @Injectable()
 export class DiscordBotService implements OnModuleInit {
   private client: Client;
   private readonly logger: AppLogger;
-  private readonly rpcEndpoint: string;
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly discordUserService: DiscordUserService,
-    private readonly paymentService: PaymentService,
-    private readonly pricingEngineService: PricingEngineService,
-    private readonly apiKeyService: ApiKeyService,
-    private readonly usageService: UsageService,
+    private readonly purchaseService: PurchaseService,
     logger: AppLogger,
   ) {
     this.logger = logger.forClass('DiscordBotService');
-    this.rpcEndpoint = this.configService.get<string>(
-      'app.rpcEndpoint',
-      'elite.rpc.solanavibestation.com',
-    );
   }
 
   async onModuleInit(): Promise<void> {
@@ -62,6 +50,11 @@ export class DiscordBotService implements OnModuleInit {
     this.logger.log('Discord bot started successfully');
   }
 
+  /**
+   * Sends two separate messages for purchase flow:
+   * 1. Purchase service button (blue)
+   * 2. View subscriptions button (red)
+   */
   async sendPurchaseServicesMessage(channelId: string): Promise<void> {
     try {
       const channel = await this.client.channels.fetch(channelId);
@@ -70,39 +63,39 @@ export class DiscordBotService implements OnModuleInit {
         return;
       }
 
-      const embed = new EmbedBuilder()
-        .setColor(0x5865f2)
-        .setTitle('🚀 RPC Services')
-        .setDescription(
-          'Purchase RPC access to our high-performance Solana nodes with dynamic pricing based on demand.',
-        )
-        .addFields(
-          { name: '📊 Basic', value: 'Perfect for testing\n10 RPS', inline: true },
-          { name: '⚡ Ultra', value: 'For production apps\n50 RPS', inline: true },
-          { name: '💎 Elite', value: 'High-performance\n200 RPS', inline: true },
-        )
-        .setFooter({ text: 'Prices adjust dynamically based on network utilization' })
-        .setTimestamp();
-
-      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      // Message 1: Purchase service button
+      const purchaseRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId('rpc_services')
           .setLabel('RPC Services')
-          .setStyle(ButtonStyle.Primary)
+          .setStyle(ButtonStyle.Success)
           .setEmoji('🔗'),
+      );
+
+      await (channel as TextChannel).send({
+        content: '**Click the button to purchase service**',
+        components: [purchaseRow] as any,
+      });
+
+      // Message 2: View subscriptions button
+      const subscriptionsRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId('view_subscriptions')
           .setLabel('View My Active Subscriptions')
-          .setStyle(ButtonStyle.Secondary)
+          .setStyle(ButtonStyle.Danger)
           .setEmoji('📋'),
       );
 
-      await channel.send({ embeds: [embed], components: [row] } as any);
-      this.logger.log('Purchase services message sent', { channelId });
+      await (channel as TextChannel).send({
+        content: '**Click the button to view your current service subscription**',
+        components: [subscriptionsRow] as any,
+      });
+
+      this.logger.log('Purchase services messages sent', { channelId });
     } catch (error) {
       this.logger.error(
         'SendMessageError',
-        'Failed to send purchase message',
+        'Failed to send purchase messages',
         { channelId },
         error as Error,
       );
@@ -112,6 +105,56 @@ export class DiscordBotService implements OnModuleInit {
   private setupEventHandlers(): void {
     this.client.on('ready', () => {
       this.logger.log(`Discord bot logged in as ${this.client.user?.tag}`);
+    });
+
+    // Handle text messages for commands
+    this.client.on('messageCreate', async (message) => {
+      try {
+        // Ignore bot messages
+        if (message.author.bot) return;
+
+        const content = message.content.trim().toLowerCase();
+
+        // Check if user is admin/owner
+        const isAdmin = message.member?.permissions.has('Administrator') || false;
+
+        // Admin command to setup purchase buttons
+        if (content === '!purchase' || content === '!setup' || content === '!buy') {
+          if (isAdmin) {
+            await this.sendPurchaseServicesMessage(message.channelId);
+            
+            // Delete the command message
+            try {
+              await message.delete();
+            } catch (error) {
+              // Ignore if we can't delete (no permissions)
+            }
+          }
+        } else if (!isAdmin) {
+          // Delete non-admin messages in purchase channels to keep them clean
+          const channel = message.channel;
+          if (channel && 'name' in channel) {
+            const channelName = (channel as any).name?.toLowerCase() || '';
+            if (channelName.includes('purchase') || channelName.includes('buy') || channelName.includes('service')) {
+              try {
+                await message.delete();
+                // Optionally send ephemeral message
+                if (message.channel.isTextBased() && 'send' in message.channel) {
+                  await (message.channel as TextChannel).send({
+                    content: `<@${message.author.id}> Please use the buttons to interact with the purchase system.`,
+                  }).then((msg: Message) => {
+                    setTimeout(() => msg.delete().catch(() => {}), 3000);
+                  }).catch(() => {});
+                }
+              } catch (error) {
+                // Ignore if we can't delete (no permissions)
+              }
+            }
+          }
+        }
+      } catch (error) {
+        this.logger.error('MessageError', 'Failed to handle message', {}, error as Error);
+      }
     });
 
     this.client.on('interactionCreate', async (interaction: Interaction) => {
@@ -139,317 +182,18 @@ export class DiscordBotService implements OnModuleInit {
     const customId = interaction.customId;
 
     if (customId === 'rpc_services') {
-      await this.showTierSelection(interaction);
+      await this.purchaseService.showTierSelection(interaction);
     } else if (customId === 'view_subscriptions') {
-      await this.showActiveSubscriptions(interaction);
+      await this.purchaseService.showActiveSubscriptions(interaction);
     } else if (customId.startsWith('tier:')) {
-      await this.showDurationSelection(interaction);
+      await this.purchaseService.showDurationSelection(interaction);
     } else if (customId.startsWith('duration:')) {
-      await this.createPayment(interaction);
+      await this.purchaseService.createPayment(interaction);
     } else if (customId.startsWith('check_payment:')) {
-      await this.checkPaymentStatus(interaction);
+      await this.purchaseService.checkPaymentStatus(interaction);
     } else if (customId === 'back_to_tiers') {
-      await this.showTierSelection(interaction);
+      await this.purchaseService.showTierSelection(interaction);
     }
   }
 
-  private async showTierSelection(interaction: any): Promise<void> {
-    const usedRps = await this.pricingEngineService.getCurrentUtilization();
-    const totalRps = this.pricingEngineService.getTotalRps();
-    const basePrice = this.pricingEngineService.calculateDynamicPrice({
-      usedRps,
-      totalRps,
-      priceMin: this.pricingEngineService.getPriceMin(),
-      priceMax: this.pricingEngineService.getPriceMax(),
-    });
-
-    const utilization = ((usedRps / totalRps) * 100).toFixed(1);
-
-    const embed = new EmbedBuilder()
-      .setColor(0x5865f2)
-      .setTitle('🎯 Select Your Tier')
-      .setDescription(
-        `Current Network Utilization: **${utilization}%**\nBase Price: **$${basePrice.toFixed(4)}** per RPS/day`,
-      )
-      .addFields(
-        {
-          name: '📊 Basic',
-          value: `10 RPS\n~$${(basePrice * 10 * 30).toFixed(2)}/month`,
-          inline: true,
-        },
-        {
-          name: '⚡ Ultra',
-          value: `50 RPS\n~$${(basePrice * 50 * 30).toFixed(2)}/month`,
-          inline: true,
-        },
-        {
-          name: '💎 Elite',
-          value: `200 RPS\n~$${(basePrice * 200 * 30).toFixed(2)}/month`,
-          inline: true,
-        },
-      )
-      .setFooter({ text: 'Select a tier to continue' })
-      .setTimestamp();
-
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId('tier:Basic')
-        .setLabel('Basic')
-        .setStyle(ButtonStyle.Success)
-        .setEmoji('📊'),
-      new ButtonBuilder()
-        .setCustomId('tier:Ultra')
-        .setLabel('Ultra')
-        .setStyle(ButtonStyle.Primary)
-        .setEmoji('⚡'),
-      new ButtonBuilder()
-        .setCustomId('tier:Elite')
-        .setLabel('Elite')
-        .setStyle(ButtonStyle.Danger)
-        .setEmoji('💎'),
-    );
-
-    await interaction.reply({ embeds: [embed], components: [row], ephemeral: true } as any);
-  }
-
-  private async showDurationSelection(interaction: any): Promise<void> {
-    const tier = interaction.customId.split(':')[1];
-
-    const embed = new EmbedBuilder()
-      .setColor(0x5865f2)
-      .setTitle(`${this.getTierEmoji(tier)} ${tier} Tier Selected`)
-      .setDescription('How long do you need the service for?')
-      .setTimestamp();
-
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`duration:${tier}:1`)
-        .setLabel('1 Day')
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId(`duration:${tier}:7`)
-        .setLabel('1 Week')
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId(`duration:${tier}:30`)
-        .setLabel('1 Month')
-        .setStyle(ButtonStyle.Secondary),
-    );
-
-    const backRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId('back_to_tiers')
-        .setLabel('← Back')
-        .setStyle(ButtonStyle.Danger),
-    );
-
-    await interaction.update({ embeds: [embed], components: [row, backRow] } as any);
-  }
-
-  private async createPayment(interaction: any): Promise<void> {
-    await interaction.deferUpdate();
-
-    const parts = interaction.customId.split(':');
-    const tier = parts[1];
-    const duration = parseInt(parts[2], 10);
-
-    const discordId = interaction.user.id;
-    const username = interaction.user.username;
-    const globalName = interaction.user.globalName;
-    const discriminator = interaction.user.discriminator;
-
-    const user = await this.discordUserService.findOrCreate(
-      discordId,
-      username,
-      globalName,
-      discriminator,
-    );
-
-    const payment = await this.paymentService.createPaymentAttempt({
-      userId: user.id,
-      tier: tier,
-      duration,
-    });
-
-    const expiryTime = new Date(Date.now() + 10 * 60 * 1000);
-    const expiryTimestamp = Math.floor(expiryTime.getTime() / 1000);
-
-    const embed = new EmbedBuilder()
-      .setColor(0xffa500)
-      .setTitle('💰 Payment Required')
-      .setDescription(
-        `To complete your purchase for **${duration} day(s)**, please send the EXACT amount in SOL to the below address.`,
-      )
-      .addFields(
-        { name: 'Amount', value: `\`${payment.amountExpected}\` SOL`, inline: false },
-        { name: 'Address', value: `\`${payment.walletAddress}\``, inline: false },
-        { name: 'Memo', value: `\`${payment.memo}\``, inline: false },
-        { name: 'Tier', value: tier, inline: true },
-        { name: 'Duration', value: `${duration} day(s)`, inline: true },
-        { name: 'Expires', value: `<t:${expiryTimestamp}:R>`, inline: false },
-      )
-      .setFooter({
-        text: '⚠️ Payment link expires in 10 minutes. If you need more time, just let me know!',
-      })
-      .setTimestamp();
-
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`check_payment:${payment.id}`)
-        .setLabel('Check Payment Status')
-        .setStyle(ButtonStyle.Success)
-        .setEmoji('✅'),
-      new ButtonBuilder()
-        .setCustomId('back_to_tiers')
-        .setLabel('Cancel')
-        .setStyle(ButtonStyle.Danger),
-    );
-
-    await interaction.editReply({ embeds: [embed], components: [row] } as any);
-
-    this.logger.log('Payment created for Discord user', {
-      userId: user.id,
-      discordId,
-      paymentId: payment.id,
-      tier,
-      duration,
-      amount: payment.amountExpected,
-    });
-  }
-
-  private async checkPaymentStatus(interaction: any): Promise<void> {
-    await interaction.deferUpdate();
-
-    const paymentId = interaction.customId.split(':')[1];
-    const payment = await this.paymentService.getPaymentAttemptById(paymentId);
-
-    if (!payment) {
-      await interaction.followUp({
-        content: '❌ Payment not found.',
-        ephemeral: true,
-      });
-      return;
-    }
-
-    const statusColor =
-      String(payment.status) === 'COMPLETED'
-        ? 0x00ff00
-        : String(payment.status) === 'PARTIAL'
-          ? 0xffa500
-          : 0xff0000;
-
-    const embed = new EmbedBuilder()
-      .setColor(statusColor)
-      .setTitle('💳 Payment Status')
-      .addFields(
-        { name: 'Status', value: this.getStatusText(payment.status), inline: true },
-        {
-          name: 'Amount Paid',
-          value: `${payment.amountPaid}/${payment.amountExpected} SOL`,
-          inline: true,
-        },
-        { name: 'Memo', value: `\`${payment.memo}\``, inline: false },
-      )
-      .setTimestamp();
-
-    if (String(payment.status) === 'COMPLETED') {
-      const discordUser = await this.discordUserService.getUserById(payment.userId);
-      if (discordUser) {
-        const apiKey = await this.apiKeyService.createApiKey(
-          discordUser.id,
-          `${payment.tier}-access`,
-        );
-
-        embed.setDescription(
-          '✅ **Payment Completed Successfully!**\n\nYour RPC access is now active!',
-        );
-        embed.addFields(
-          { name: '🔑 API Key', value: `||\`${apiKey.fullKey}\`||`, inline: false },
-          { name: '🌐 RPC Endpoint', value: `\`https://${this.rpcEndpoint}\``, inline: false },
-          {
-            name: 'ℹ️ Usage',
-            value: 'Add the API key to your requests using the `X-API-Key` header',
-            inline: false,
-          },
-        );
-
-        await interaction.editReply({ embeds: [embed], components: [] } as any);
-      }
-    } else {
-      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`check_payment:${paymentId}`)
-          .setLabel('Refresh Status')
-          .setStyle(ButtonStyle.Primary)
-          .setEmoji('🔄'),
-        new ButtonBuilder()
-          .setCustomId('back_to_tiers')
-          .setLabel('Cancel')
-          .setStyle(ButtonStyle.Danger),
-      );
-
-      await interaction.editReply({ embeds: [embed], components: [row] } as any);
-    }
-  }
-
-  private async showActiveSubscriptions(interaction: any): Promise<void> {
-    const discordId = interaction.user.id;
-    const user = await this.discordUserService.getUserByDiscordId(discordId);
-
-    if (!user) {
-      await interaction.reply({
-        content: '❌ You need to make a purchase first!',
-        ephemeral: true,
-      });
-      return;
-    }
-
-    const purchases = await this.usageService.getActivePurchases(user.id);
-
-    if (purchases.length === 0) {
-      await interaction.reply({
-        content: '📭 You have no active subscriptions. Click "RPC Services" to purchase!',
-        ephemeral: true,
-      });
-      return;
-    }
-
-    const totalRps = purchases.reduce((sum, p) => sum + Number(p.rpsAllocated), 0);
-
-    const embed = new EmbedBuilder()
-      .setColor(0x00ff00)
-      .setTitle('📋 Your Active Subscriptions')
-      .setDescription(`Total Allocated RPS: **${totalRps}**`)
-      .setTimestamp();
-
-    for (const purchase of purchases) {
-      const expiryTimestamp = Math.floor(purchase.expiresAt.getTime() / 1000);
-      embed.addFields({
-        name: `${this.getTierEmoji(purchase.tier)} ${purchase.tier}`,
-        value: `RPS: ${purchase.rpsAllocated}\nExpires: <t:${expiryTimestamp}:R>`,
-        inline: true,
-      });
-    }
-
-    await interaction.reply({ embeds: [embed], ephemeral: true } as any);
-  }
-
-  private getTierEmoji(tier: string): string {
-    const emojis: Record<string, string> = {
-      Basic: '📊',
-      Ultra: '⚡',
-      Elite: '💎',
-    };
-    return emojis[tier] || '📦';
-  }
-
-  private getStatusText(status: string): string {
-    const statusMap: Record<string, string> = {
-      PENDING: '⏳ Pending',
-      PARTIAL: '⚠️ Partial',
-      COMPLETED: '✅ Completed',
-      EXPIRED: '❌ Expired',
-    };
-    return statusMap[status] || '❓ Unknown';
-  }
 }
