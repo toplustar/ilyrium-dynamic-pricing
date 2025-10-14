@@ -13,6 +13,7 @@ import solanaConfig from '~/config/solana.config';
 import telegramConfig from '~/config/telegram.config';
 import paymentConfig from '~/config/payment.config';
 import apiKeyConfig from '~/config/api-key.config';
+import discordConfig from '~/config/discord.config';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -21,6 +22,7 @@ import { PricingModule } from './modules/pricing/pricing.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { ApiKeyModule } from './modules/api-key/api-key.module';
 import { TelegramBotModule } from './modules/telegram-bot/telegram-bot.module';
+import { DiscordBotModule } from './modules/discord-bot/discord-bot.module';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { AppLogger } from './common/services/app-logger.service';
@@ -39,6 +41,7 @@ import { AppLogger } from './common/services/app-logger.service';
         telegramConfig,
         paymentConfig,
         apiKeyConfig,
+        discordConfig,
       ],
     }),
     TypeOrmModule.forRootAsync({
@@ -77,6 +80,7 @@ import { AppLogger } from './common/services/app-logger.service';
     PaymentModule,
     ApiKeyModule,
     TelegramBotModule,
+    DiscordBotModule,
   ],
   controllers: [AppController],
   providers: [

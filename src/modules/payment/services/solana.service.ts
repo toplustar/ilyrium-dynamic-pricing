@@ -22,9 +22,10 @@ export interface SolanaTransaction {
 export class SolanaService {
   private readonly connection: Connection;
   private readonly paymentWallet: PublicKey;
-  private readonly usdcMint: PublicKey;
+  private readonly usdcMint: PublicKey | null;
   private readonly requiredConfirmations: number;
   private readonly logger: AppLogger;
+  private readonly useNativeSOL: boolean;
 
   constructor(
     private readonly configService: ConfigService,
@@ -35,19 +36,21 @@ export class SolanaService {
     const rpcUrl = this.configService.get<string>('solana.rpcUrl');
     const walletAddress = this.configService.get<string>('solana.paymentWallet');
     const usdcMintAddress = this.configService.get<string>('solana.usdcMint');
-    this.requiredConfirmations = this.configService.get<number>('solana.confirmationCount', 32);
+    this.requiredConfirmations = this.configService.get<number>('solana.confirmationCount', 1);
+    this.useNativeSOL = this.configService.get<boolean>('solana.useNativeSOL', true);
 
-    if (!rpcUrl || !walletAddress || !usdcMintAddress) {
+    if (!rpcUrl || !walletAddress) {
       throw new Error('Solana configuration is incomplete');
     }
 
     this.connection = new Connection(rpcUrl, 'confirmed');
     this.paymentWallet = new PublicKey(walletAddress);
-    this.usdcMint = new PublicKey(usdcMintAddress);
+    this.usdcMint = usdcMintAddress ? new PublicKey(usdcMintAddress) : null;
 
     this.logger.log('Solana service initialized', {
       rpcUrl,
       wallet: walletAddress,
+      useNativeSOL: this.useNativeSOL,
       confirmations: this.requiredConfirmations,
     });
   }
@@ -173,11 +176,13 @@ export class SolanaService {
     }
 
     const memo = this.extractMemo(transaction);
-    if (memo !== targetMemo) {
+    if (targetMemo && memo !== targetMemo) {
       return null;
     }
 
-    const amount = this.extractUsdcAmount(transaction);
+    const amount = this.useNativeSOL 
+      ? this.extractSOLAmount(transaction) 
+      : this.extractUsdcAmount(transaction);
     if (amount === 0) {
       return null;
     }
@@ -193,7 +198,7 @@ export class SolanaService {
     return {
       signature: signatureInfo.signature,
       amount,
-      memo,
+      memo: memo || '',
       timestamp: new Date((signatureInfo.blockTime || 0) * 1000),
       confirmations,
       fromAddress,
@@ -218,6 +223,31 @@ export class SolanaService {
   }
 
   /**
+   * Extract native SOL transfer amount from transaction
+   */
+  private extractSOLAmount(transaction: ParsedTransactionWithMeta): number {
+    const preBalances = transaction.meta?.preBalances || [];
+    const postBalances = transaction.meta?.postBalances || [];
+    const accountKeys = transaction.transaction.message.accountKeys;
+
+    // Find the payment wallet index
+    const walletIndex = accountKeys.findIndex(
+      key => key.pubkey.toBase58() === this.paymentWallet.toBase58()
+    );
+
+    if (walletIndex === -1 || walletIndex >= preBalances.length || walletIndex >= postBalances.length) {
+      return 0;
+    }
+
+    const preBalance = preBalances[walletIndex] || 0;
+    const postBalance = postBalances[walletIndex] || 0;
+    const difference = postBalance - preBalance;
+
+    // Convert lamports to SOL
+    return difference > 0 ? difference / 1_000_000_000 : 0;
+  }
+
+  /**
    * Extract USDC transfer amount from transaction
    */
   private extractUsdcAmount(transaction: ParsedTransactionWithMeta): number {
@@ -231,6 +261,7 @@ export class SolanaService {
           const info = parsed.info;
 
           if (
+            this.usdcMint &&
             info.mint === this.usdcMint.toBase58() &&
             info.destination === this.paymentWallet.toBase58()
           ) {
