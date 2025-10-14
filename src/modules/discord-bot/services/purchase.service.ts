@@ -126,12 +126,14 @@ export class PurchaseService {
     const paymentMessage = `To complete your purchase for **${duration} day(s)**, please send the **EXACT** amount in SOL to the below address.
 
 **Amount**
-${payment.amountExpected}
+${payment.amountExpected} SOL
 
-**Address**
-${payment.walletAddress}
+**Address** (Unique for your payment)
+\`${payment.walletAddress}\`
 
-Just a heads-up, the payment link will expire in 10 minutes. If you need more time, just let me know!`;
+⚠️ Send ONLY to this address. No memo required!
+
+⏰ This payment link will expire in 1 hour. Please complete your payment before then!`;
 
     await interaction.followUp({
       content: paymentMessage,
@@ -182,7 +184,11 @@ Just a heads-up, the payment link will expire in 10 minutes. If you need more ti
           value: `${payment.amountPaid}/${payment.amountExpected} SOL`,
           inline: true,
         },
-        { name: 'Memo', value: `\`${payment.memo}\``, inline: false },
+        {
+          name: 'Payment Address',
+          value: `\`${payment.paymentAddress || 'N/A'}\``,
+          inline: false,
+        },
       )
       .setTimestamp();
 

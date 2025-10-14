@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   Index,
   OneToMany,
+  // @ts-ignore - TypeORM types
 } from 'typeorm';
 
 import { PaymentTransaction } from './payment-transaction.entity';
@@ -20,6 +21,7 @@ export enum PaymentStatus {
 @Entity('payment_attempts')
 @Index(['userId'])
 @Index(['memo'], { unique: true })
+@Index(['paymentAddress'], { unique: true })
 @Index(['status'])
 export class PaymentAttempt {
   @PrimaryGeneratedColumn('uuid')
@@ -28,8 +30,14 @@ export class PaymentAttempt {
   @Column({ name: 'user_id', type: 'uuid' })
   userId: string;
 
-  @Column({ length: 10, unique: true })
-  memo: string;
+  @Column({ length: 10, unique: true, nullable: true })
+  memo?: string;
+
+  @Column({ name: 'payment_address', length: 44, unique: true, nullable: true })
+  paymentAddress?: string;
+
+  @Column({ name: 'payment_private_key', type: 'bytea', nullable: true })
+  paymentPrivateKey?: Buffer;
 
   @Column({ type: 'varchar', length: 50 })
   tier: string;
@@ -49,7 +57,7 @@ export class PaymentAttempt {
   @Column({ name: 'expires_at', type: 'timestamp' })
   expiresAt: Date;
 
-  @OneToMany(() => PaymentTransaction, transaction => transaction.paymentAttempt)
+  @OneToMany(() => PaymentTransaction, (transaction: PaymentTransaction) => transaction.paymentAttempt)
   transactions: PaymentTransaction[];
 
   @CreateDateColumn({ name: 'created_at' })

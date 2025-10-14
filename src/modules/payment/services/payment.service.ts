@@ -1,16 +1,18 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+// @ts-ignore - TypeORM types
 import { Repository, LessThan, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
-import { nanoid } from 'nanoid';
 
 import { AppLogger } from '~/common/services/app-logger.service';
 import { Purchase } from '~/modules/pricing/entities/purchase.entity';
 import { TierType } from '~/modules/pricing/entities/tier.enum';
 import { PricingEngineService } from '~/modules/pricing/services/pricing-engine.service';
+import { CryptoUtil } from '~/common/utils/crypto.util';
 
 import { PaymentTransaction } from '../entities/payment-transaction.entity';
 import { PaymentAttempt, PaymentStatus } from '../entities/payment-attempt.entity';
+import { SolanaService } from './solana.service';
 
 export interface CreatePaymentAttemptDto {
   userId: string;
@@ -31,8 +33,7 @@ export interface PaymentAttemptResponse {
 @Injectable()
 export class PaymentService {
   private readonly logger: AppLogger;
-  private readonly memoExpiryDays: number;
-  private readonly paymentWallet: string;
+  private readonly paymentExpiryMinutes: number;
   private notificationService?: {
     notifyPaymentReceived: (userId: string, amount: number, remaining: number) => Promise<void>;
     notifyPurchaseComplete: (
@@ -52,11 +53,12 @@ export class PaymentService {
     private readonly purchaseRepository: Repository<Purchase>,
     private readonly configService: ConfigService,
     private readonly pricingEngineService: PricingEngineService,
+    private readonly solanaService: SolanaService,
     logger: AppLogger,
   ) {
     this.logger = logger.forClass('PaymentService');
-    this.memoExpiryDays = this.configService.get<number>('payment.memoExpiryDays', 7);
-    this.paymentWallet = this.configService.get<string>('solana.paymentWallet', '');
+    // Payment link expires in 60 minutes (1 hour) by default
+    this.paymentExpiryMinutes = this.configService.get<number>('payment.expiryMinutes', 60);
   }
 
   setNotificationService(service: {
@@ -72,7 +74,7 @@ export class PaymentService {
   }
 
   /**
-   * Create a new payment attempt with unique memo
+   * Create a new payment attempt with unique address
    */
   async createPaymentAttempt(dto: CreatePaymentAttemptDto): Promise<PaymentAttemptResponse> {
     this.logger.log('Creating payment attempt', { userId: dto.userId, tier: dto.tier });
@@ -98,14 +100,20 @@ export class PaymentService {
       throw new HttpException('Insufficient capacity available', HttpStatus.CONFLICT);
     }
 
-    const memo = await this.generateUniqueMemo();
+    // Generate unique payment address
+    const { publicKey, privateKey } = this.solanaService.generatePaymentAddress();
 
+    // Encrypt the private key before storing
+    const encryptedPrivateKey = CryptoUtil.encryptPrivateKey(privateKey);
+
+    // Set payment expiration to 1 hour from now
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + this.memoExpiryDays);
+    expiresAt.setMinutes(expiresAt.getMinutes() + this.paymentExpiryMinutes);
 
     const paymentAttempt = this.paymentAttemptRepository.create({
       userId: dto.userId,
-      memo,
+      paymentAddress: publicKey,
+      paymentPrivateKey: encryptedPrivateKey,
       tier: dto.tier,
       duration: dto.duration,
       amountExpected: totalPrice,
@@ -116,19 +124,19 @@ export class PaymentService {
 
     const saved = await this.paymentAttemptRepository.save(paymentAttempt);
 
-    this.logger.log('Payment attempt created', {
+    this.logger.log('Payment attempt created with unique address', {
       id: saved.id,
-      memo,
+      paymentAddress: publicKey,
       amountExpected: totalPrice,
       expiresAt,
     });
 
     return {
       id: saved.id,
-      memo: saved.memo,
+      memo: '', // No memo needed
       amountExpected: saved.amountExpected,
       amountPaid: saved.amountPaid,
-      walletAddress: this.paymentWallet,
+      walletAddress: publicKey, // Return unique address
       expiresAt: saved.expiresAt,
       status: saved.status,
     };
@@ -263,36 +271,6 @@ export class PaymentService {
   }
 
   /**
-   * Generate a unique 10-character alphanumeric memo
-   */
-  private async generateUniqueMemo(): Promise<string> {
-    const alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    let attempts = 0;
-    const maxAttempts = 10;
-
-    while (attempts < maxAttempts) {
-      const memo = nanoid(10)
-        .replace(/[^A-Za-z0-9]/g, '')
-        .toUpperCase()
-        .slice(0, 10);
-
-      const paddedMemo = memo.padEnd(10, alphabet[Math.floor(Math.random() * alphabet.length)]);
-
-      const existing = await this.paymentAttemptRepository.findOne({
-        where: { memo: paddedMemo },
-      });
-
-      if (!existing) {
-        return paddedMemo;
-      }
-
-      attempts++;
-    }
-
-    throw new HttpException('Failed to generate unique memo', HttpStatus.INTERNAL_SERVER_ERROR);
-  }
-
-  /**
    * Complete the purchase after payment is verified
    */
   private async completePurchase(paymentAttempt: PaymentAttempt): Promise<void> {
@@ -339,6 +317,151 @@ export class PaymentService {
       tier: paymentAttempt.tier,
       rps: tierInfo.rps,
       expiresAt,
+    });
+
+    // Immediately sweep funds to main wallet
+    await this.sweepSinglePayment(paymentAttempt);
+  }
+
+  /**
+   * Sweep a single payment immediately after completion
+   */
+  private async sweepSinglePayment(payment: PaymentAttempt): Promise<void> {
+    // Check if payment has a private key (unique address system)
+    if (!payment.paymentPrivateKey || !payment.paymentAddress) {
+      this.logger.debug('Payment has no private key, skipping immediate sweep', {
+        paymentId: payment.id,
+      });
+      return;
+    }
+
+    const mainWallet = this.configService.get<string>('solana.paymentWallet');
+    if (!mainWallet) {
+      this.logger.error('SweepError', 'Main wallet not configured', {});
+      return;
+    }
+
+    try {
+      this.logger.log('Starting immediate sweep', {
+        paymentId: payment.id,
+        from: payment.paymentAddress,
+        to: mainWallet,
+      });
+
+      // Decrypt the private key
+      const privateKey = CryptoUtil.decryptPrivateKey(payment.paymentPrivateKey);
+
+      // Sweep funds to main wallet
+      const signature = await this.solanaService.sweepFunds(privateKey, mainWallet);
+
+      if (signature) {
+        // Clear the private key after successful sweep (security)
+        payment.paymentPrivateKey = undefined;
+        await this.paymentAttemptRepository.save(payment);
+
+        this.logger.log('Immediate sweep successful', {
+          paymentId: payment.id,
+          from: payment.paymentAddress,
+          to: mainWallet,
+          signature,
+        });
+      } else {
+        this.logger.warn('Immediate sweep failed (insufficient balance or error)', {
+          paymentId: payment.id,
+          address: payment.paymentAddress,
+        });
+      }
+    } catch (error) {
+      this.logger.error(
+        'ImmediateSweepError',
+        'Failed to immediately sweep payment',
+        { paymentId: payment.id },
+        error as Error,
+      );
+      // Don't throw - let the hourly cron retry if this fails
+    }
+  }
+
+  /**
+   * Sweep completed payments to main wallet
+   * Called by cron job (backup sweep for any missed payments)
+   */
+  async sweepCompletedPayments(): Promise<void> {
+    this.logger.log('Starting auto-sweep of completed payments');
+
+    const mainWallet = this.configService.get<string>('solana.paymentWallet');
+    if (!mainWallet) {
+      this.logger.error('SweepError', 'Main wallet not configured', {});
+      return;
+    }
+
+    // Find completed payments with private keys (not yet swept)
+    const completedPayments = await this.paymentAttemptRepository.find({
+      where: {
+        status: PaymentStatus.COMPLETED,
+      },
+      take: 50, // Process up to 50 at a time
+    });
+
+    const paymentsToSweep = completedPayments.filter(
+      (p: PaymentAttempt) => p.paymentPrivateKey && p.paymentAddress,
+    );
+
+    if (paymentsToSweep.length === 0) {
+      this.logger.debug('No payments to sweep');
+      return;
+    }
+
+    this.logger.log(`Found ${paymentsToSweep.length} payments to sweep`);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const payment of paymentsToSweep) {
+      try {
+        // Decrypt the private key
+        const privateKey = CryptoUtil.decryptPrivateKey(payment.paymentPrivateKey!);
+
+        // Sweep funds to main wallet
+        const signature = await this.solanaService.sweepFunds(privateKey, mainWallet);
+
+        if (signature) {
+          // Clear the private key after successful sweep (security)
+          payment.paymentPrivateKey = undefined;
+          await this.paymentAttemptRepository.save(payment);
+
+          successCount++;
+          this.logger.log('Swept payment', {
+            paymentId: payment.id,
+            from: payment.paymentAddress,
+            to: mainWallet,
+            signature,
+          });
+        } else {
+          failCount++;
+          this.logger.warn('Failed to sweep payment (insufficient balance or error)', {
+            paymentId: payment.id,
+            address: payment.paymentAddress,
+          });
+        }
+
+        // Small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        failCount++;
+        this.logger.error(
+          'SweepError',
+          'Failed to sweep payment',
+          { paymentId: payment.id },
+          error as Error,
+        );
+      }
+    }
+
+    this.logger.log('Auto-sweep completed', {
+      total: paymentsToSweep.length,
+      success: successCount,
+      failed: failCount,
     });
   }
 }

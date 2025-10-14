@@ -72,6 +72,8 @@ import { AppLogger } from './common/services/app-logger.service';
         db: redisConfig.database,
         ttl: redisConfig.ttl,
         keyPrefix: redisConfig.keyPrefix,
+        // Enable TLS for Upstash Redis
+        tls: redisConfig.host?.includes('upstash.io') ? {} : undefined,
       }),
       inject: [RedisConfig.KEY],
     }),
