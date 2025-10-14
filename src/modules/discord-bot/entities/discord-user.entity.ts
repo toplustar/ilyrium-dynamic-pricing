@@ -34,4 +34,3 @@ export class DiscordUser {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }
-

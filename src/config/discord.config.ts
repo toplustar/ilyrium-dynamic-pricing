@@ -6,4 +6,3 @@ export default registerAs('discord', () => ({
   guildId: process.env.DISCORD_GUILD_ID || '',
   purchaseChannelId: process.env.DISCORD_PURCHASE_CHANNEL_ID || '',
 }));
-

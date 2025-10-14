@@ -34,7 +34,10 @@ export class DiscordBotService implements OnModuleInit {
     logger: AppLogger,
   ) {
     this.logger = logger.forClass('DiscordBotService');
-    this.rpcEndpoint = this.configService.get<string>('app.rpcEndpoint', 'elite.rpc.solanavibestation.com');
+    this.rpcEndpoint = this.configService.get<string>(
+      'app.rpcEndpoint',
+      'elite.rpc.solanavibestation.com',
+    );
   }
 
   async onModuleInit(): Promise<void> {
@@ -59,32 +62,10 @@ export class DiscordBotService implements OnModuleInit {
     this.logger.log('Discord bot started successfully');
   }
 
-  private setupEventHandlers(): void {
-    this.client.on('ready', () => {
-      this.logger.log(`Discord bot logged in as ${this.client.user?.tag}`);
-    });
-
-    this.client.on('interactionCreate', async (interaction: Interaction) => {
-      try {
-        if (interaction.isButton()) {
-          await this.handleButtonInteraction(interaction);
-        }
-      } catch (error) {
-        this.logger.error('InteractionError', 'Failed to handle interaction', {}, error as Error);
-        if (interaction.isRepliable()) {
-          await interaction.reply({
-            content: 'Sorry, something went wrong. Please try again later.',
-            ephemeral: true,
-          }).catch(() => {});
-        }
-      }
-    });
-  }
-
   async sendPurchaseServicesMessage(channelId: string): Promise<void> {
     try {
       const channel = await this.client.channels.fetch(channelId);
-      if (!channel || !channel.isTextBased()) {
+      if (!channel?.isTextBased()) {
         this.logger.error('ChannelError', 'Channel not found or not text-based', { channelId });
         return;
       }
@@ -92,11 +73,13 @@ export class DiscordBotService implements OnModuleInit {
       const embed = new EmbedBuilder()
         .setColor(0x5865f2)
         .setTitle('🚀 RPC Services')
-        .setDescription('Purchase RPC access to our high-performance Solana nodes with dynamic pricing based on demand.')
+        .setDescription(
+          'Purchase RPC access to our high-performance Solana nodes with dynamic pricing based on demand.',
+        )
         .addFields(
           { name: '📊 Basic', value: 'Perfect for testing\n10 RPS', inline: true },
           { name: '⚡ Ultra', value: 'For production apps\n50 RPS', inline: true },
-          { name: '💎 Elite', value: 'High-performance\n200 RPS', inline: true }
+          { name: '💎 Elite', value: 'High-performance\n200 RPS', inline: true },
         )
         .setFooter({ text: 'Prices adjust dynamically based on network utilization' })
         .setTimestamp();
@@ -111,15 +94,46 @@ export class DiscordBotService implements OnModuleInit {
           .setCustomId('view_subscriptions')
           .setLabel('View My Active Subscriptions')
           .setStyle(ButtonStyle.Secondary)
-          .setEmoji('📋')
+          .setEmoji('📋'),
       );
 
       await channel.send({ embeds: [embed], components: [row] } as any);
       this.logger.log('Purchase services message sent', { channelId });
     } catch (error) {
-      this.logger.error('SendMessageError', 'Failed to send purchase message', { channelId }, error as Error);
+      this.logger.error(
+        'SendMessageError',
+        'Failed to send purchase message',
+        { channelId },
+        error as Error,
+      );
     }
   }
+
+  private setupEventHandlers(): void {
+    this.client.on('ready', () => {
+      this.logger.log(`Discord bot logged in as ${this.client.user?.tag}`);
+    });
+
+    this.client.on('interactionCreate', async (interaction: Interaction) => {
+      try {
+        if (interaction.isButton()) {
+          await this.handleButtonInteraction(interaction);
+        }
+      } catch (error) {
+        this.logger.error('InteractionError', 'Failed to handle interaction', {}, error as Error);
+        if (interaction.isRepliable()) {
+          await interaction
+            .reply({
+              content: 'Sorry, something went wrong. Please try again later.',
+              ephemeral: true,
+            })
+            .catch(() => {});
+        }
+      }
+    });
+  }
+
+  // Private methods
 
   private async handleButtonInteraction(interaction: any): Promise<void> {
     const customId = interaction.customId;
@@ -154,11 +168,25 @@ export class DiscordBotService implements OnModuleInit {
     const embed = new EmbedBuilder()
       .setColor(0x5865f2)
       .setTitle('🎯 Select Your Tier')
-      .setDescription(`Current Network Utilization: **${utilization}%**\nBase Price: **$${basePrice.toFixed(4)}** per RPS/day`)
+      .setDescription(
+        `Current Network Utilization: **${utilization}%**\nBase Price: **$${basePrice.toFixed(4)}** per RPS/day`,
+      )
       .addFields(
-        { name: '📊 Basic', value: `10 RPS\n~$${(basePrice * 10 * 30).toFixed(2)}/month`, inline: true },
-        { name: '⚡ Ultra', value: `50 RPS\n~$${(basePrice * 50 * 30).toFixed(2)}/month`, inline: true },
-        { name: '💎 Elite', value: `200 RPS\n~$${(basePrice * 200 * 30).toFixed(2)}/month`, inline: true }
+        {
+          name: '📊 Basic',
+          value: `10 RPS\n~$${(basePrice * 10 * 30).toFixed(2)}/month`,
+          inline: true,
+        },
+        {
+          name: '⚡ Ultra',
+          value: `50 RPS\n~$${(basePrice * 50 * 30).toFixed(2)}/month`,
+          inline: true,
+        },
+        {
+          name: '💎 Elite',
+          value: `200 RPS\n~$${(basePrice * 200 * 30).toFixed(2)}/month`,
+          inline: true,
+        },
       )
       .setFooter({ text: 'Select a tier to continue' })
       .setTimestamp();
@@ -178,7 +206,7 @@ export class DiscordBotService implements OnModuleInit {
         .setCustomId('tier:Elite')
         .setLabel('Elite')
         .setStyle(ButtonStyle.Danger)
-        .setEmoji('💎')
+        .setEmoji('💎'),
     );
 
     await interaction.reply({ embeds: [embed], components: [row], ephemeral: true } as any);
@@ -205,14 +233,14 @@ export class DiscordBotService implements OnModuleInit {
       new ButtonBuilder()
         .setCustomId(`duration:${tier}:30`)
         .setLabel('1 Month')
-        .setStyle(ButtonStyle.Secondary)
+        .setStyle(ButtonStyle.Secondary),
     );
 
     const backRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId('back_to_tiers')
         .setLabel('← Back')
-        .setStyle(ButtonStyle.Danger)
+        .setStyle(ButtonStyle.Danger),
     );
 
     await interaction.update({ embeds: [embed], components: [row, backRow] } as any);
@@ -234,12 +262,12 @@ export class DiscordBotService implements OnModuleInit {
       discordId,
       username,
       globalName,
-      discriminator
+      discriminator,
     );
 
     const payment = await this.paymentService.createPaymentAttempt({
       userId: user.id,
-      tier: tier as any,
+      tier: tier,
       duration,
     });
 
@@ -249,16 +277,20 @@ export class DiscordBotService implements OnModuleInit {
     const embed = new EmbedBuilder()
       .setColor(0xffa500)
       .setTitle('💰 Payment Required')
-      .setDescription(`To complete your purchase for **${duration} day(s)**, please send the EXACT amount in SOL to the below address.`)
+      .setDescription(
+        `To complete your purchase for **${duration} day(s)**, please send the EXACT amount in SOL to the below address.`,
+      )
       .addFields(
         { name: 'Amount', value: `\`${payment.amountExpected}\` SOL`, inline: false },
         { name: 'Address', value: `\`${payment.walletAddress}\``, inline: false },
         { name: 'Memo', value: `\`${payment.memo}\``, inline: false },
         { name: 'Tier', value: tier, inline: true },
         { name: 'Duration', value: `${duration} day(s)`, inline: true },
-        { name: 'Expires', value: `<t:${expiryTimestamp}:R>`, inline: false }
+        { name: 'Expires', value: `<t:${expiryTimestamp}:R>`, inline: false },
       )
-      .setFooter({ text: '⚠️ Payment link expires in 10 minutes. If you need more time, just let me know!' })
+      .setFooter({
+        text: '⚠️ Payment link expires in 10 minutes. If you need more time, just let me know!',
+      })
       .setTimestamp();
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -270,7 +302,7 @@ export class DiscordBotService implements OnModuleInit {
       new ButtonBuilder()
         .setCustomId('back_to_tiers')
         .setLabel('Cancel')
-        .setStyle(ButtonStyle.Danger)
+        .setStyle(ButtonStyle.Danger),
     );
 
     await interaction.editReply({ embeds: [embed], components: [row] } as any);
@@ -299,28 +331,46 @@ export class DiscordBotService implements OnModuleInit {
       return;
     }
 
-    const statusColor = payment.status === 'COMPLETED' ? 0x00ff00 : payment.status === 'PARTIAL' ? 0xffa500 : 0xff0000;
+    const statusColor =
+      String(payment.status) === 'COMPLETED'
+        ? 0x00ff00
+        : String(payment.status) === 'PARTIAL'
+          ? 0xffa500
+          : 0xff0000;
 
     const embed = new EmbedBuilder()
       .setColor(statusColor)
       .setTitle('💳 Payment Status')
       .addFields(
         { name: 'Status', value: this.getStatusText(payment.status), inline: true },
-        { name: 'Amount Paid', value: `${payment.amountPaid}/${payment.amountExpected} SOL`, inline: true },
-        { name: 'Memo', value: `\`${payment.memo}\``, inline: false }
+        {
+          name: 'Amount Paid',
+          value: `${payment.amountPaid}/${payment.amountExpected} SOL`,
+          inline: true,
+        },
+        { name: 'Memo', value: `\`${payment.memo}\``, inline: false },
       )
       .setTimestamp();
 
-    if (payment.status === 'COMPLETED') {
+    if (String(payment.status) === 'COMPLETED') {
       const discordUser = await this.discordUserService.getUserById(payment.userId);
       if (discordUser) {
-        const apiKey = await this.apiKeyService.createApiKey(discordUser.id, `${payment.tier}-access`);
+        const apiKey = await this.apiKeyService.createApiKey(
+          discordUser.id,
+          `${payment.tier}-access`,
+        );
 
-        embed.setDescription('✅ **Payment Completed Successfully!**\n\nYour RPC access is now active!');
+        embed.setDescription(
+          '✅ **Payment Completed Successfully!**\n\nYour RPC access is now active!',
+        );
         embed.addFields(
           { name: '🔑 API Key', value: `||\`${apiKey.fullKey}\`||`, inline: false },
           { name: '🌐 RPC Endpoint', value: `\`https://${this.rpcEndpoint}\``, inline: false },
-          { name: 'ℹ️ Usage', value: 'Add the API key to your requests using the `X-API-Key` header', inline: false }
+          {
+            name: 'ℹ️ Usage',
+            value: 'Add the API key to your requests using the `X-API-Key` header',
+            inline: false,
+          },
         );
 
         await interaction.editReply({ embeds: [embed], components: [] } as any);
@@ -335,7 +385,7 @@ export class DiscordBotService implements OnModuleInit {
         new ButtonBuilder()
           .setCustomId('back_to_tiers')
           .setLabel('Cancel')
-          .setStyle(ButtonStyle.Danger)
+          .setStyle(ButtonStyle.Danger),
       );
 
       await interaction.editReply({ embeds: [embed], components: [row] } as any);
@@ -403,4 +453,3 @@ export class DiscordBotService implements OnModuleInit {
     return statusMap[status] || '❓ Unknown';
   }
 }
-

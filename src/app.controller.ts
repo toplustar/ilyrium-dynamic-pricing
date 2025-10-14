@@ -112,7 +112,7 @@ export class AppController {
   @ApiResponse({ status: 200, description: 'Channel initialized successfully' })
   async initDiscordChannel(): Promise<{ success: boolean; message: string }> {
     const channelId = this.configService.get<string>('discord.purchaseChannelId');
-    
+
     if (!channelId) {
       return {
         success: false,
@@ -121,7 +121,7 @@ export class AppController {
     }
 
     await this.discordBotService.sendPurchaseServicesMessage(channelId);
-    
+
     return {
       success: true,
       message: `Purchase services message sent to channel ${channelId}`,

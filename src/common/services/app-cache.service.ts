@@ -19,7 +19,8 @@ export class AppCacheService {
   ) {
     const host = this.configService.get('redis.host') || this.configService.get('REDIS_HOST');
     const port = this.configService.get('redis.port') || this.configService.get('REDIS_PORT');
-    const database = this.configService.get('redis.database') ?? this.configService.get('REDIS_DATABASE') ?? 0;
+    const database =
+      this.configService.get('redis.database') ?? this.configService.get('REDIS_DATABASE') ?? 0;
 
     if (!host) {
       throw new Error('REDIS_HOST is required but not configured');
@@ -28,7 +29,8 @@ export class AppCacheService {
       throw new Error('REDIS_PORT is required but not configured');
     }
 
-    this.keyPrefix = this.configService.get('redis.keyPrefix') || this.configService.get('REDIS_KEY_PREFIX') || '';
+    this.keyPrefix =
+      this.configService.get('redis.keyPrefix') || this.configService.get('REDIS_KEY_PREFIX') || '';
     this.redisTarget = `${host}:${port}/${database}`;
   }
 

@@ -180,8 +180,8 @@ export class SolanaService {
       return null;
     }
 
-    const amount = this.useNativeSOL 
-      ? this.extractSOLAmount(transaction) 
+    const amount = this.useNativeSOL
+      ? this.extractSOLAmount(transaction)
       : this.extractUsdcAmount(transaction);
     if (amount === 0) {
       return null;
@@ -232,10 +232,14 @@ export class SolanaService {
 
     // Find the payment wallet index
     const walletIndex = accountKeys.findIndex(
-      key => key.pubkey.toBase58() === this.paymentWallet.toBase58()
+      key => key.pubkey.toBase58() === this.paymentWallet.toBase58(),
     );
 
-    if (walletIndex === -1 || walletIndex >= preBalances.length || walletIndex >= postBalances.length) {
+    if (
+      walletIndex === -1 ||
+      walletIndex >= preBalances.length ||
+      walletIndex >= postBalances.length
+    ) {
       return 0;
     }
 
@@ -265,7 +269,8 @@ export class SolanaService {
             info.mint === this.usdcMint.toBase58() &&
             info.destination === this.paymentWallet.toBase58()
           ) {
-            const amount = (info.tokenAmount?.uiAmount as number | undefined) || info.amount / 1_000_000;
+            const amount =
+              (info.tokenAmount?.uiAmount as number | undefined) || info.amount / 1_000_000;
             return amount;
           }
         }

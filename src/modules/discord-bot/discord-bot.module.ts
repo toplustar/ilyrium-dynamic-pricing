@@ -22,4 +22,3 @@ import { DiscordUserService } from './services/discord-user.service';
   exports: [DiscordBotService, DiscordUserService],
 })
 export class DiscordBotModule {}
-
