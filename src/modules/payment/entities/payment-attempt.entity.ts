@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import {
   Entity,
   Column,
@@ -57,7 +58,10 @@ export class PaymentAttempt {
   @Column({ name: 'expires_at', type: 'timestamp' })
   expiresAt: Date;
 
-  @OneToMany(() => PaymentTransaction, (transaction: PaymentTransaction) => transaction.paymentAttempt)
+  @OneToMany(
+    () => PaymentTransaction,
+    (transaction: PaymentTransaction) => transaction.paymentAttempt,
+  )
   transactions: PaymentTransaction[];
 
   @CreateDateColumn({ name: 'created_at' })

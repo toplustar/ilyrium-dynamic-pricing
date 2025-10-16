@@ -5,10 +5,10 @@ import { Repository, LessThan, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 
 import { AppLogger } from '~/common/services/app-logger.service';
+import { CryptoUtil } from '~/common/utils/crypto.util';
+import { PricingEngineService } from '~/modules/pricing/services/pricing-engine.service';
 import { Purchase } from '~/modules/pricing/entities/purchase.entity';
 import { TierType } from '~/modules/pricing/entities/tier.enum';
-import { PricingEngineService } from '~/modules/pricing/services/pricing-engine.service';
-import { CryptoUtil } from '~/common/utils/crypto.util';
 
 import { PaymentTransaction } from '../entities/payment-transaction.entity';
 import { PaymentAttempt, PaymentStatus } from '../entities/payment-attempt.entity';
@@ -326,6 +326,83 @@ export class PaymentService {
   /**
    * Sweep a single payment immediately after completion
    */
+  async sweepCompletedPayments(): Promise<void> {
+    this.logger.log('Starting auto-sweep of completed payments');
+
+    const mainWallet = this.configService.get<string>('solana.paymentWallet');
+    if (!mainWallet) {
+      this.logger.error('SweepError', 'Main wallet not configured', {});
+      return;
+    }
+
+    const completedPayments = await this.paymentAttemptRepository.find({
+      where: {
+        status: PaymentStatus.COMPLETED,
+      },
+      take: 50,
+    });
+
+    const paymentsToSweep = completedPayments.filter(
+      (p: PaymentAttempt) => p.paymentPrivateKey && p.paymentAddress,
+    );
+
+    if (paymentsToSweep.length === 0) {
+      this.logger.debug('No payments to sweep');
+      return;
+    }
+
+    this.logger.log(`Found ${paymentsToSweep.length} payments to sweep`);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const payment of paymentsToSweep) {
+      try {
+        const { paymentPrivateKey } = payment;
+        if (!paymentPrivateKey) {
+          continue;
+        }
+        const privateKey = CryptoUtil.decryptPrivateKey(paymentPrivateKey);
+        const signature = await this.solanaService.sweepFunds(privateKey, mainWallet);
+
+        if (signature) {
+          payment.paymentPrivateKey = undefined;
+          await this.paymentAttemptRepository.save(payment);
+
+          successCount++;
+          this.logger.log('Swept payment', {
+            paymentId: payment.id,
+            from: payment.paymentAddress,
+            to: mainWallet,
+            signature,
+          });
+        } else {
+          failCount++;
+          this.logger.warn('Failed to sweep payment (insufficient balance or error)', {
+            paymentId: payment.id,
+            address: payment.paymentAddress,
+          });
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        failCount++;
+        this.logger.error(
+          'SweepError',
+          'Failed to sweep payment',
+          { paymentId: payment.id },
+          error as Error,
+        );
+      }
+    }
+
+    this.logger.log('Auto-sweep completed', {
+      total: paymentsToSweep.length,
+      success: successCount,
+      failed: failCount,
+    });
+  }
+
   private async sweepSinglePayment(payment: PaymentAttempt): Promise<void> {
     // Check if payment has a private key (unique address system)
     if (!payment.paymentPrivateKey || !payment.paymentAddress) {
@@ -349,7 +426,11 @@ export class PaymentService {
       });
 
       // Decrypt the private key
-      const privateKey = CryptoUtil.decryptPrivateKey(payment.paymentPrivateKey);
+      const { paymentPrivateKey } = payment;
+      if (!paymentPrivateKey) {
+        return;
+      }
+      const privateKey = CryptoUtil.decryptPrivateKey(paymentPrivateKey);
 
       // Sweep funds to main wallet
       const signature = await this.solanaService.sweepFunds(privateKey, mainWallet);
@@ -382,86 +463,5 @@ export class PaymentService {
     }
   }
 
-  /**
-   * Sweep completed payments to main wallet
-   * Called by cron job (backup sweep for any missed payments)
-   */
-  async sweepCompletedPayments(): Promise<void> {
-    this.logger.log('Starting auto-sweep of completed payments');
-
-    const mainWallet = this.configService.get<string>('solana.paymentWallet');
-    if (!mainWallet) {
-      this.logger.error('SweepError', 'Main wallet not configured', {});
-      return;
-    }
-
-    // Find completed payments with private keys (not yet swept)
-    const completedPayments = await this.paymentAttemptRepository.find({
-      where: {
-        status: PaymentStatus.COMPLETED,
-      },
-      take: 50, // Process up to 50 at a time
-    });
-
-    const paymentsToSweep = completedPayments.filter(
-      (p: PaymentAttempt) => p.paymentPrivateKey && p.paymentAddress,
-    );
-
-    if (paymentsToSweep.length === 0) {
-      this.logger.debug('No payments to sweep');
-      return;
-    }
-
-    this.logger.log(`Found ${paymentsToSweep.length} payments to sweep`);
-
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const payment of paymentsToSweep) {
-      try {
-        // Decrypt the private key
-        const privateKey = CryptoUtil.decryptPrivateKey(payment.paymentPrivateKey!);
-
-        // Sweep funds to main wallet
-        const signature = await this.solanaService.sweepFunds(privateKey, mainWallet);
-
-        if (signature) {
-          // Clear the private key after successful sweep (security)
-          payment.paymentPrivateKey = undefined;
-          await this.paymentAttemptRepository.save(payment);
-
-          successCount++;
-          this.logger.log('Swept payment', {
-            paymentId: payment.id,
-            from: payment.paymentAddress,
-            to: mainWallet,
-            signature,
-          });
-        } else {
-          failCount++;
-          this.logger.warn('Failed to sweep payment (insufficient balance or error)', {
-            paymentId: payment.id,
-            address: payment.paymentAddress,
-          });
-        }
-
-        // Small delay to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      } catch (error) {
-        failCount++;
-        this.logger.error(
-          'SweepError',
-          'Failed to sweep payment',
-          { paymentId: payment.id },
-          error as Error,
-        );
-      }
-    }
-
-    this.logger.log('Auto-sweep completed', {
-      total: paymentsToSweep.length,
-      success: successCount,
-      failed: failCount,
-    });
-  }
+  // Duplicate removed (method declared earlier)
 }

@@ -413,9 +413,7 @@ export class SolanaService {
 
     // Check post balances vs pre balances
     const accountKeys = transaction.transaction.message.accountKeys;
-    const accountIndex = accountKeys.findIndex(
-      (key) => key.pubkey.toBase58() === targetAddressStr,
-    );
+    const accountIndex = accountKeys.findIndex(key => key.pubkey.toBase58() === targetAddressStr);
 
     if (accountIndex === -1) {
       return 0;

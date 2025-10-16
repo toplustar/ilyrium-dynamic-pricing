@@ -6,7 +6,9 @@
   "private": true,
   "license": "MIT",
   "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "nest build",
+    "build:strict": "npm run lint && npm run typecheck && nest build",
     "format": "prettier --write \"{src,eslint-rules,migrations}/**/*.{ts,js}\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -16,6 +18,7 @@
     "lint": "eslint \"{src,apps,libs,test,seeds,scripts}/**/*.ts\"",
     "lint:fix": "eslint \"{src,apps,libs,test,seeds,scripts}/**/*.ts\" --fix",
     "lint:verbose": "eslint \"{src,apps,libs,test,seeds,scripts}/**/*.ts\" --format=stylish --debug",
+    "ci:check": "npm run lint && npm run typecheck",
     "test": "echo \"No tests yet\" && exit 0",
     "test:watch": "echo \"No tests yet\" && exit 0",
     "test:cov": "echo \"No tests yet\" && exit 0",

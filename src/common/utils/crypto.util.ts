@@ -6,7 +6,6 @@ export class CryptoUtil {
   private static readonly AUTH_TAG_LENGTH = 16;
   private static readonly KEY_LENGTH = 32;
 
-
   static encrypt(data: Uint8Array | Buffer): Buffer {
     const key = this.getEncryptionKey();
     const iv = crypto.randomBytes(this.IV_LENGTH);
@@ -67,10 +66,10 @@ export class CryptoUtil {
     const key = Buffer.from(keyHex, 'hex');
 
     if (key.length !== this.KEY_LENGTH) {
-      throw new Error(`ENCRYPTION_KEY must be ${this.KEY_LENGTH} bytes (${this.KEY_LENGTH * 2} hex chars)`);
+      // Keep message short to satisfy formatter
+      throw new Error('ENCRYPTION_KEY must be 32 bytes (64 hex chars)');
     }
 
     return key;
   }
 }
-

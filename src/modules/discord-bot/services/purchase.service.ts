@@ -1,18 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  EmbedBuilder,
-  ButtonInteraction,
-} from 'discord.js';
-// @ts-ignore - ButtonStyle type conflict in discord.js
+import { ActionRowBuilder, ButtonBuilder, EmbedBuilder, ButtonInteraction } from 'discord.js';
 import { ButtonStyle } from 'discord.js';
 
+import { ConfigService } from '@nestjs/config';
 import { AppLogger } from '~/common/services/app-logger.service';
 import { PaymentService } from '~/modules/payment/services/payment.service';
 import { ApiKeyService } from '~/modules/api-key/services/api-key.service';
 import { UsageService } from '~/modules/pricing/services/usage.service';
-import { ConfigService } from '@nestjs/config';
 
 import { DiscordUserService } from './discord-user.service';
 
@@ -36,9 +30,6 @@ export class PurchaseService {
     );
   }
 
-  /**
-   * Show tier selection when user clicks "RPC services" button
-   */
   async showTierSelection(interaction: ButtonInteraction): Promise<void> {
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
@@ -62,9 +53,6 @@ export class PurchaseService {
     } as any);
   }
 
-  /**
-   * Show duration selection after tier is selected
-   */
   async showDurationSelection(interaction: ButtonInteraction): Promise<void> {
     const tier = interaction.customId.split(':')[1] || 'Basic';
 
@@ -90,9 +78,6 @@ export class PurchaseService {
     } as any);
   }
 
-  /**
-   * Create payment after duration is selected
-   */
   async createPayment(interaction: ButtonInteraction): Promise<void> {
     // Show "Creating payment link..." message
     await interaction.reply({
@@ -150,9 +135,6 @@ ${payment.amountExpected} SOL
     });
   }
 
-  /**
-   * Check payment status
-   */
   async checkPaymentStatus(interaction: ButtonInteraction): Promise<void> {
     await interaction.deferUpdate();
 
@@ -232,9 +214,6 @@ ${payment.amountExpected} SOL
     }
   }
 
-  /**
-   * Show active subscriptions
-   */
   async showActiveSubscriptions(interaction: ButtonInteraction): Promise<void> {
     const discordId = interaction.user.id;
     const user = await this.discordUserService.getUserByDiscordId(discordId);
@@ -296,4 +275,3 @@ ${payment.amountExpected} SOL
     return statusMap[status] || '❓ Unknown';
   }
 }
-

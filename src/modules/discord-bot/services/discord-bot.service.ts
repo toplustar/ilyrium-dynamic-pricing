@@ -7,12 +7,10 @@ import {
   Interaction,
   TextChannel,
   Message,
+  GatewayIntentBits,
+  ButtonStyle,
 } from 'discord.js';
-// @ts-ignore - Type conflicts in discord.js
-import { GatewayIntentBits, ButtonStyle } from 'discord.js';
-
 import { AppLogger } from '~/common/services/app-logger.service';
-
 import { PurchaseService } from './purchase.service';
 
 @Injectable()
@@ -45,16 +43,10 @@ export class DiscordBotService implements OnModuleInit {
     });
 
     this.setupEventHandlers();
-
     await this.client.login(botToken);
     this.logger.log('Discord bot started successfully');
   }
 
-  /**
-   * Sends two separate messages for purchase flow:
-   * 1. Purchase service button (blue)
-   * 2. View subscriptions button (red)
-   */
   async sendPurchaseServicesMessage(channelId: string): Promise<void> {
     try {
       const channel = await this.client.channels.fetch(channelId);
@@ -63,7 +55,6 @@ export class DiscordBotService implements OnModuleInit {
         return;
       }
 
-      // Message 1: Purchase service button
       const purchaseRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId('rpc_services')
@@ -77,7 +68,6 @@ export class DiscordBotService implements OnModuleInit {
         components: [purchaseRow] as any,
       });
 
-      // Message 2: View subscriptions button
       const subscriptionsRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId('view_subscriptions')
@@ -92,94 +82,85 @@ export class DiscordBotService implements OnModuleInit {
       });
 
       this.logger.log('Purchase services messages sent', { channelId });
-    } catch (error) {
+    } catch (err) {
       this.logger.error(
         'SendMessageError',
         'Failed to send purchase messages',
         { channelId },
-        error as Error,
+        err as Error,
       );
     }
   }
 
   private setupEventHandlers(): void {
-    this.client.on('ready', () => {
+    this.client.on('ready', (): void => {
       this.logger.log(`Discord bot logged in as ${this.client.user?.tag}`);
     });
 
-    // Handle text messages for commands
-    this.client.on('messageCreate', async (message) => {
-      try {
-        // Ignore bot messages
-        if (message.author.bot) return;
-
-        const content = message.content.trim().toLowerCase();
-
-        // Check if user is admin/owner
-        const isAdmin = message.member?.permissions.has('Administrator') || false;
-
-        // Admin command to setup purchase buttons
-        if (content === '!purchase' || content === '!setup' || content === '!buy') {
-          if (isAdmin) {
-            await this.sendPurchaseServicesMessage(message.channelId);
-            
-            // Delete the command message
-            try {
-              await message.delete();
-            } catch (error) {
-              // Ignore if we can't delete (no permissions)
-            }
-          }
-        } else if (!isAdmin) {
-          // Delete non-admin messages in purchase channels to keep them clean
-          const channel = message.channel;
-          if (channel && 'name' in channel) {
-            const channelName = (channel as any).name?.toLowerCase() || '';
-            if (channelName.includes('purchase') || channelName.includes('buy') || channelName.includes('service')) {
-              try {
-                await message.delete();
-                // Optionally send ephemeral message
-                if (message.channel.isTextBased() && 'send' in message.channel) {
-                  await (message.channel as TextChannel).send({
-                    content: `<@${message.author.id}> Please use the buttons to interact with the purchase system.`,
-                  }).then((msg: Message) => {
-                    setTimeout(() => msg.delete().catch(() => {}), 3000);
-                  }).catch(() => {});
-                }
-              } catch (error) {
-                // Ignore if we can't delete (no permissions)
-              }
-            }
-          }
-        }
-      } catch (error) {
-        this.logger.error('MessageError', 'Failed to handle message', {}, error as Error);
-      }
+    this.client.on('messageCreate', (message: Message): void => {
+      void this.handleMessage(message).catch(err =>
+        this.logger.error('MessageError', 'Failed to handle message', {}, err as Error),
+      );
     });
 
-    this.client.on('interactionCreate', async (interaction: Interaction) => {
-      try {
-        if (interaction.isButton()) {
-          await this.handleButtonInteraction(interaction);
+    this.client.on('interactionCreate', (interaction: Interaction): void => {
+      void (async (): Promise<void> => {
+        try {
+          if (interaction.isButton()) {
+            await this.handleButtonInteraction(interaction);
+          }
+        } catch (err) {
+          this.logger.error('InteractionError', 'Failed to handle interaction', {}, err as Error);
+          if (interaction.isRepliable()) {
+            await interaction
+              .reply({
+                content: 'Sorry, something went wrong. Please try again later.',
+                ephemeral: true,
+              })
+              .catch(() => {});
+          }
         }
-      } catch (error) {
-        this.logger.error('InteractionError', 'Failed to handle interaction', {}, error as Error);
-        if (interaction.isRepliable()) {
-          await interaction
-            .reply({
-              content: 'Sorry, something went wrong. Please try again later.',
-              ephemeral: true,
-            })
-            .catch(() => {});
-        }
-      }
+      })();
     });
   }
 
-  // Private methods
+  private async handleMessage(message: Message): Promise<void> {
+    if (message.author.bot) return;
+
+    const content = message.content.trim().toLowerCase();
+    const isAdmin = message.member?.permissions.has('Administrator') || false;
+
+    if (isAdmin && ['!purchase', '!setup', '!buy'].includes(content)) {
+      await this.sendPurchaseServicesMessage(message.channelId);
+      await message.delete().catch(() => {});
+      return;
+    }
+
+    if (!isAdmin && message.channel.isTextBased()) {
+      const channel = message.channel as TextChannel;
+      const name = channel.name?.toLowerCase() || '';
+      const isPurchaseChannel =
+        name.includes('purchase') || name.includes('buy') || name.includes('service');
+
+      if (isPurchaseChannel) {
+        await message.delete().catch(() => {});
+        const msg = await channel
+          .send({
+            content: `<@${message.author.id}> Please use the buttons to interact with the purchase system.`,
+          })
+          .catch(() => undefined);
+
+        if (msg) {
+          setTimeout(() => {
+            void msg.delete().catch(() => {});
+          }, 3000);
+        }
+      }
+    }
+  }
 
   private async handleButtonInteraction(interaction: any): Promise<void> {
-    const customId = interaction.customId;
+    const { customId } = interaction;
 
     if (customId === 'rpc_services') {
       await this.purchaseService.showTierSelection(interaction);
@@ -195,5 +176,4 @@ export class DiscordBotService implements OnModuleInit {
       await this.purchaseService.showTierSelection(interaction);
     }
   }
-
 }
