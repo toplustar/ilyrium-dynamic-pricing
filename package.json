@@ -8,8 +8,9 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "nest build",
-    "build:strict": "npm run lint && npm run typecheck && nest build",
+    "build:strict": "npm run format:check && npm run lint && npm run typecheck && nest build",
     "format": "prettier --write \"{src,eslint-rules,migrations}/**/*.{ts,js}\"",
+    "format:check": "prettier --check \"{src,eslint-rules,migrations}/**/*.{ts,js}\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",

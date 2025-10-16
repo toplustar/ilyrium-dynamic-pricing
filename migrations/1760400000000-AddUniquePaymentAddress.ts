@@ -53,4 +53,3 @@ export class AddUniquePaymentAddress1760400000000 implements MigrationInterface 
     `);
   }
 }
-
