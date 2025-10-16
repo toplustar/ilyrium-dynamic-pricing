@@ -1,6 +1,6 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-// import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 
 import { AppLogger } from '~/common/services/app-logger.service';
 
@@ -28,9 +28,9 @@ export class TransactionMonitorService implements OnModuleInit {
   }
 
   /**
-   * Main monitoring job - runs every 10 seconds
+   * Main monitoring job - checks for payments every 10 seconds
    */
-  // @Cron(CronExpression.EVERY_MINUTE)
+  @Cron('*/10 * * * * *')
   async monitorTransactions(): Promise<void> {
     if (this.isMonitoring) {
       this.logger.debug('Monitor already running, skipping this cycle');
@@ -81,12 +81,22 @@ export class TransactionMonitorService implements OnModuleInit {
 
     for (const payment of pendingPayments) {
       try {
-        await this.checkPaymentAttempt(payment.id, payment.memo);
+        if (payment.paymentAddress) {
+          // New system: Check unique address
+          await this.checkPaymentByAddress(
+            payment.id,
+            payment.paymentAddress,
+            payment.amountExpected,
+          );
+        } else if (payment.memo) {
+          // Old system: Check memo (backward compatibility)
+          await this.checkPaymentAttempt(payment.id, payment.memo);
+        }
       } catch (error) {
         this.logger.error(
           'PaymentCheckError',
           `Failed to check payment ${payment.id}`,
-          { memo: payment.memo },
+          { paymentAddress: payment.paymentAddress, memo: payment.memo },
           error as Error,
         );
       }
@@ -96,7 +106,56 @@ export class TransactionMonitorService implements OnModuleInit {
   }
 
   /**
-   * Check a specific payment attempt for transactions
+   * Check a specific payment by unique address
+   */
+  private async checkPaymentByAddress(
+    paymentAttemptId: string,
+    paymentAddress: string,
+    expectedAmount: number,
+  ): Promise<void> {
+    this.logger.debug(`Checking payment address ${paymentAddress}`);
+
+    // Query transactions to this specific address
+    const transactions = await this.solanaService.queryTransactionsByAddress(
+      paymentAddress,
+      expectedAmount * 0.99, // Allow 1% tolerance
+    );
+
+    if (transactions.length === 0) {
+      this.logger.debug(`No transactions found for address ${paymentAddress}`);
+      return;
+    }
+
+    this.logger.log(`Found ${transactions.length} transactions for ${paymentAddress}`);
+
+    for (const transaction of transactions) {
+      try {
+        await this.paymentService.recordTransaction(
+          paymentAttemptId,
+          transaction.signature,
+          transaction.amount,
+          transaction.fromAddress,
+          transaction.confirmations,
+        );
+
+        this.logger.log('Transaction processed', {
+          paymentAttemptId,
+          signature: transaction.signature,
+          amount: transaction.amount,
+        });
+      } catch (error) {
+        this.logger.error(
+          'TransactionProcessingError',
+          `Failed to process transaction ${transaction.signature}`,
+          { paymentAttemptId, paymentAddress },
+          error as Error,
+        );
+      }
+    }
+  }
+
+  /**
+   * Check a specific payment attempt for transactions (memo-based, for backward compatibility)
    */
   private async checkPaymentAttempt(paymentAttemptId: string, memo: string): Promise<void> {
     this.logger.debug(`Checking payment attempt ${paymentAttemptId} with memo ${memo}`);

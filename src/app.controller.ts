@@ -1,12 +1,18 @@
 import { Controller, Get, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 
 import { AppService, HealthCheckResponse } from './app.service';
+import { DiscordBotService } from './modules/discord-bot/services/discord-bot.service';
 
 @ApiTags('App')
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+  constructor(
+    private readonly appService: AppService,
+    private readonly discordBotService: DiscordBotService,
+    private readonly configService: ConfigService,
+  ) {}
 
   @Get('health')
   @ApiOperation({
@@ -96,5 +102,29 @@ export class AppController {
   @ApiResponse({ status: 200, description: 'Returns welcome message' })
   getHello(): string {
     return this.appService.getHello();
+  }
+
+  @Get('init-discord-channel')
+  @ApiOperation({
+    summary: 'Initialize Discord purchase channel',
+    description: 'Sends the RPC Services message with buttons to the configured Discord channel',
+  })
+  @ApiResponse({ status: 200, description: 'Channel initialized successfully' })
+  async initDiscordChannel(): Promise<{ success: boolean; message: string }> {
+    const channelId = this.configService.get<string>('discord.purchaseChannelId');
+
+    if (!channelId) {
+      return {
+        success: false,
+        message: 'DISCORD_PURCHASE_CHANNEL_ID not configured',
+      };
+    }
+
+    await this.discordBotService.sendPurchaseServicesMessage(channelId);
+
+    return {
+      success: true,
+      message: `Purchase services message sent to channel ${channelId}`,
+    };
   }
 }

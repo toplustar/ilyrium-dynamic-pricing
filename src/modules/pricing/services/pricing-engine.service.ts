@@ -103,6 +103,21 @@ export class PricingEngineService {
         rps: 1000,
         description: 'High-performance for large-scale operations',
       },
+      {
+        name: 'Basic',
+        rps: 10,
+        description: 'Perfect for testing and small applications',
+      },
+      {
+        name: 'Ultra',
+        rps: 50,
+        description: 'For production applications',
+      },
+      {
+        name: 'Elite',
+        rps: 200,
+        description: 'High-performance for large-scale operations',
+      },
     ];
   }
 

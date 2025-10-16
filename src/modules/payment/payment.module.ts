@@ -15,6 +15,7 @@ import { PaymentTransaction } from './entities/payment-transaction.entity';
 import { SolanaService } from './services/solana.service';
 import { PaymentService } from './services/payment.service';
 import { TransactionMonitorService } from './services/transaction-monitor.service';
+import { PaymentSweepService } from './services/payment-sweep.service';
 
 @Module({
   imports: [
@@ -33,7 +34,8 @@ import { TransactionMonitorService } from './services/transaction-monitor.servic
     SolanaService,
     PaymentService,
     TransactionMonitorService,
+    PaymentSweepService,
   ],
-  exports: [SolanaService, PaymentService, TransactionMonitorService],
+  exports: [SolanaService, PaymentService, TransactionMonitorService, PaymentSweepService],
 })
 export class PaymentModule {}
