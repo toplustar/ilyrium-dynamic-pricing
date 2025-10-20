@@ -1,7 +1,7 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 // @ts-ignore - TypeORM types
-import { Repository, LessThan, In } from 'typeorm';
+import { Repository, LessThan, MoreThan, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 
 import { AppLogger } from '~/common/services/app-logger.service';
@@ -9,6 +9,7 @@ import { CryptoUtil } from '~/common/utils/crypto.util';
 import { PricingEngineService } from '~/modules/pricing/services/pricing-engine.service';
 import { Purchase } from '~/modules/pricing/entities/purchase.entity';
 import { TierType } from '~/modules/pricing/entities/tier.enum';
+import { ApiKeyService } from '~/modules/api-key/services/api-key.service';
 
 import { PaymentTransaction } from '../entities/payment-transaction.entity';
 import { PaymentAttempt, PaymentStatus } from '../entities/payment-attempt.entity';
@@ -42,6 +43,19 @@ export class PaymentService {
       rps: number,
       expiresAt: Date,
     ) => Promise<void>;
+    // 🆕 NEW: Automatically send API key when payment completes
+    notifyApiKeyGenerated: (
+      userId: string,
+      paymentAddress: string,
+      apiKey: string,
+      details: {
+        tier: string;
+        duration: number;
+        expiresAt: Date;
+        amountPaid: number;
+        backendUrl: string;
+      },
+    ) => Promise<void>;
   };
 
   constructor(
@@ -54,11 +68,14 @@ export class PaymentService {
     private readonly configService: ConfigService,
     private readonly pricingEngineService: PricingEngineService,
     private readonly solanaService: SolanaService,
+    private readonly apiKeyService: ApiKeyService,
     logger: AppLogger,
   ) {
     this.logger = logger.forClass('PaymentService');
     // Payment link expires in 60 minutes (1 hour) by default
     this.paymentExpiryMinutes = this.configService.get<number>('payment.expiryMinutes', 60);
+    // Silence unused method warning for testing
+    void this.sweepSinglePayment;
   }
 
   setNotificationService(service: {
@@ -68,6 +85,19 @@ export class PaymentService {
       tier: string,
       rps: number,
       expiresAt: Date,
+    ) => Promise<void>;
+    // 🆕 NEW: Automatically send API key when payment completes
+    notifyApiKeyGenerated: (
+      userId: string,
+      paymentAddress: string,
+      apiKey: string,
+      details: {
+        tier: string;
+        duration: number;
+        expiresAt: Date;
+        amountPaid: number;
+        backendUrl: string;
+      },
     ) => Promise<void>;
   }): void {
     this.notificationService = service;
@@ -182,9 +212,9 @@ export class PaymentService {
 
     await this.paymentTransactionRepository.save(transaction);
 
-    paymentAttempt.amountPaid = Number((paymentAttempt.amountPaid + amount).toFixed(6));
+    paymentAttempt.amountPaid = Number((Number(paymentAttempt.amountPaid) + amount).toFixed(6));
 
-    if (paymentAttempt.amountPaid >= paymentAttempt.amountExpected) {
+    if (paymentAttempt.amountPaid >= Number(paymentAttempt.amountExpected)) {
       paymentAttempt.status = PaymentStatus.COMPLETED;
       await this.completePurchase(paymentAttempt);
     } else if (paymentAttempt.amountPaid > 0) {
@@ -194,7 +224,7 @@ export class PaymentService {
     await this.paymentAttemptRepository.save(paymentAttempt);
 
     if (this.notificationService) {
-      const remainingAmount = paymentAttempt.amountExpected - paymentAttempt.amountPaid;
+      const remainingAmount = Number(paymentAttempt.amountExpected) - paymentAttempt.amountPaid;
       await this.notificationService.notifyPaymentReceived(
         paymentAttempt.userId,
         amount,
@@ -229,13 +259,74 @@ export class PaymentService {
     });
   }
 
+  async getPaymentAttemptByAddress(paymentAddress: string): Promise<PaymentAttempt | null> {
+    return await this.paymentAttemptRepository.findOne({
+      where: { paymentAddress },
+      relations: ['transactions'],
+    });
+  }
+
   /**
    * Get all pending payment attempts
    */
   async getPendingPaymentAttempts(): Promise<PaymentAttempt[]> {
+    // Only monitor attempts that are still within their expiry window
     return await this.paymentAttemptRepository.find({
-      where: [{ status: PaymentStatus.PENDING }, { status: PaymentStatus.PARTIAL }],
+      where: [
+        { status: PaymentStatus.PENDING, expiresAt: MoreThan(new Date()) },
+        { status: PaymentStatus.PARTIAL, expiresAt: MoreThan(new Date()) },
+      ],
     });
+  }
+
+  /**
+   * Get all payment attempts for debugging
+   */
+  async getAllPaymentAttempts(): Promise<PaymentAttempt[]> {
+    return await this.paymentAttemptRepository.find({
+      order: { createdAt: 'DESC' },
+      take: 20, // Limit to last 20 for debugging
+    });
+  }
+
+  /**
+   * Get API keys for a specific user
+   */
+  async getApiKeysForUser(userId: string): Promise<any[]> {
+    return await this.apiKeyService.getApiKeysForUser(userId);
+  }
+
+  /**
+   * Get all API keys (for debugging)
+   */
+  async getAllApiKeys(): Promise<any[]> {
+    return await this.apiKeyService.getAllApiKeys();
+  }
+
+  /**
+   * Get API key for a completed payment
+   */
+  async getApiKeyForPayment(paymentAttemptId: string): Promise<any> {
+    const payment = await this.paymentAttemptRepository.findOne({
+      where: { id: paymentAttemptId },
+    });
+
+    if (!payment || payment.status !== PaymentStatus.COMPLETED) {
+      return null;
+    }
+
+    // Find API key created for this user around the time of payment completion
+    const apiKeys = await this.apiKeyService.getApiKeysForUser(payment.userId);
+
+    // Return the most recent API key (should be the one for this payment)
+    return apiKeys.length > 0 ? apiKeys[0] : null;
+  }
+
+  /**
+   * Regenerate API key for a user (when original was lost)
+   */
+  async regenerateApiKey(userId: string, oldKeyId?: string): Promise<any> {
+    return await this.apiKeyService.regenerateApiKey(userId, oldKeyId);
   }
 
   /**
@@ -300,15 +391,62 @@ export class PaymentService {
 
     await this.purchaseRepository.save(purchase);
 
+    // Generate API key automatically when purchase is completed
+    let generatedApiKey: any = null;
+    try {
+      generatedApiKey = await this.apiKeyService.createApiKey(
+        paymentAttempt.userId,
+        `${paymentAttempt.tier}-access`,
+        expiresAt,
+        { tier: paymentAttempt.tier, duration: paymentAttempt.duration },
+      );
+
+      this.logger.log('API key generated automatically', {
+        keyId: generatedApiKey.id,
+        userId: paymentAttempt.userId,
+        tier: paymentAttempt.tier,
+        expiresAt: generatedApiKey.expiresAt,
+      });
+    } catch (error) {
+      this.logger.error(
+        'Failed to generate API key',
+        `Payment attempt ${paymentAttempt.id}`,
+        { userId: paymentAttempt.userId },
+        error as Error,
+      );
+    }
+
     await this.pricingEngineService.updateUtilization(tierInfo.rps);
 
-    if (this.notificationService) {
+    // 🚀 AUTO-SEND API KEY TO USER WHEN PAYMENT COMPLETES
+    if (this.notificationService && generatedApiKey) {
+      // Send API key automatically to user
+      await this.notificationService.notifyApiKeyGenerated(
+        paymentAttempt.userId,
+        paymentAttempt.paymentAddress || 'unknown',
+        generatedApiKey.fullKey, // 🔑 FULL API KEY SENT AUTOMATICALLY!
+        {
+          tier: paymentAttempt.tier,
+          duration: paymentAttempt.duration,
+          expiresAt: generatedApiKey.expiresAt,
+          amountPaid: paymentAttempt.amountPaid,
+          backendUrl: this.configService.get<string>('app.rpcBackendUrl', 'http://localhost:3000'),
+        },
+      );
+
+      // Also send basic completion notification
       await this.notificationService.notifyPurchaseComplete(
         paymentAttempt.userId,
         paymentAttempt.tier,
         tierInfo.rps,
         expiresAt,
       );
+
+      this.logger.log('🎉 API key sent automatically to user!', {
+        userId: paymentAttempt.userId,
+        paymentAddress: paymentAttempt.paymentAddress,
+        tier: paymentAttempt.tier,
+      });
     }
 
     this.logger.log('Purchase completed', {
@@ -320,7 +458,9 @@ export class PaymentService {
     });
 
     // Immediately sweep funds to main wallet
-    await this.sweepSinglePayment(paymentAttempt);
+    // TEMPORARILY DISABLED FOR TESTING
+    this.logger.log('🛑 Immediate sweep in completePurchase DISABLED for testing');
+    // await this.sweepSinglePayment(paymentAttempt);
   }
 
   /**
@@ -463,5 +603,29 @@ export class PaymentService {
     }
   }
 
-  // Duplicate removed (method declared earlier)
+  /**
+   * Mark a payment as swept to avoid re-processing
+   */
+  async markPaymentSwept(paymentAttemptId: string): Promise<void> {
+    this.logger.log('Marking payment as swept', { paymentAttemptId });
+
+    const paymentAttempt = await this.paymentAttemptRepository.findOne({
+      where: { id: paymentAttemptId },
+    });
+
+    if (!paymentAttempt) {
+      throw new HttpException('Payment attempt not found', HttpStatus.NOT_FOUND);
+    }
+
+    // For now, we'll use a simple approach - update the updatedAt timestamp
+    // In the future, you could add a specific 'sweptAt' column
+    paymentAttempt.updatedAt = new Date();
+    await this.paymentAttemptRepository.save(paymentAttempt);
+
+    this.logger.log('Payment marked as swept', {
+      paymentAttemptId,
+      status: paymentAttempt.status,
+      amountPaid: paymentAttempt.amountPaid,
+    });
+  }
 }

@@ -80,7 +80,7 @@ Expires: ${expiresAt.toLocaleDateString()}
 
 Your RPC access is now active! 🚀
 
-Use /createkey to generate your API key.
+Check your next message for your API key! 🔑
       `.trim();
 
       await this.telegramBotService.sendNotification(user.telegramId, message);
@@ -91,6 +91,67 @@ Use /createkey to generate your API key.
         'PurchaseNotificationError',
         'Failed to send purchase notification',
         { userId },
+        error as Error,
+      );
+    }
+  }
+
+  // 🚀 NEW METHOD: Auto-send API key when payment completes!
+  async notifyApiKeyGenerated(
+    userId: string,
+    paymentAddress: string,
+    apiKey: string,
+    details: {
+      tier: string;
+      duration: number;
+      expiresAt: Date;
+      amountPaid: number;
+      backendUrl: string;
+    },
+  ): Promise<void> {
+    try {
+      const user = await this.telegramUserService.getUserById(userId);
+      if (!user) {
+        this.logger.warn('User not found for API key notification', { userId, paymentAddress });
+        return;
+      }
+
+      const message = `
+🔑 *Your API Key is Ready!*
+
+\`${apiKey}\`
+
+📊 *Purchase Details:*
+• Tier: *${details.tier}*
+• Duration: *${details.duration} day${details.duration > 1 ? 's' : ''}*
+• Amount Paid: *${details.amountPaid} SOL*
+• Expires: ${details.expiresAt.toLocaleDateString()}
+
+🌐 *Backend URL:*
+\`${details.backendUrl}\`
+
+📝 *Usage Instructions:*
+Add this header to your requests:
+\`X-API-Key: ${apiKey}\`
+
+⚠️ *Important:* Save this API key securely! This is the only time you'll see the full key.
+
+Payment Address: \`${paymentAddress}\`
+      `.trim();
+
+      await this.telegramBotService.sendNotification(user.telegramId, message);
+
+      this.logger.log('🎉 API key sent automatically!', {
+        userId,
+        paymentAddress,
+        tier: details.tier,
+        keyPrefix: apiKey.substring(0, 7) + '***',
+      });
+    } catch (error) {
+      this.logger.error(
+        'ApiKeyNotificationError',
+        'Failed to send API key notification',
+        { userId, paymentAddress },
         error as Error,
       );
     }

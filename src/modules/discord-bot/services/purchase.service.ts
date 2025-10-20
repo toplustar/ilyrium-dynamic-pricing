@@ -5,28 +5,28 @@ import { ButtonStyle } from 'discord.js';
 import { ConfigService } from '@nestjs/config';
 import { AppLogger } from '~/common/services/app-logger.service';
 import { PaymentService } from '~/modules/payment/services/payment.service';
-import { ApiKeyService } from '~/modules/api-key/services/api-key.service';
 import { UsageService } from '~/modules/pricing/services/usage.service';
 
 import { DiscordUserService } from './discord-user.service';
+import { DiscordNotificationService } from './discord-notification.service';
 
 @Injectable()
 export class PurchaseService {
   private readonly logger: AppLogger;
-  private readonly rpcEndpoint: string;
+  private readonly rpcBackendUrl: string;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly discordUserService: DiscordUserService,
+    private readonly discordNotificationService: DiscordNotificationService,
     private readonly paymentService: PaymentService,
-    private readonly apiKeyService: ApiKeyService,
     private readonly usageService: UsageService,
     logger: AppLogger,
   ) {
     this.logger = logger.forClass('PurchaseService');
-    this.rpcEndpoint = this.configService.get<string>(
-      'app.rpcEndpoint',
-      'elite.rpc.solanavibestation.com',
+    this.rpcBackendUrl = this.configService.get<string>(
+      'app.rpcBackendUrl',
+      'http://localhost:3000',
     );
   }
 
@@ -100,6 +100,9 @@ export class PurchaseService {
       globalName,
       discriminator,
     );
+
+    // Store user interaction context for ephemeral messages
+    this.discordNotificationService.storeUserInteraction(user.id, discordId, interaction);
 
     const payment = await this.paymentService.createPaymentAttempt({
       userId: user.id,
@@ -175,28 +178,31 @@ ${payment.amountExpected} SOL
       .setTimestamp();
 
     if (String(payment.status) === 'COMPLETED') {
-      const discordUser = await this.discordUserService.getUserById(payment.userId);
-      if (discordUser) {
-        const apiKey = await this.apiKeyService.createApiKey(
-          discordUser.id,
-          `${payment.tier}-access`,
-        );
+      // Calculate expiry date based on purchase duration
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + payment.duration);
+      const expiryTimestamp = Math.floor(expiresAt.getTime() / 1000);
 
-        embed.setDescription(
-          '✅ **Payment Completed Successfully!**\n\nYour RPC access is now active!',
-        );
-        embed.addFields(
-          { name: '🔑 API Key', value: `||\`${apiKey.fullKey}\`||`, inline: false },
-          { name: '🌐 RPC Endpoint', value: `\`https://${this.rpcEndpoint}\``, inline: false },
-          {
-            name: 'ℹ️ Usage',
-            value: 'Add the API key to your requests using the `X-API-Key` header',
-            inline: false,
-          },
-        );
+      embed.setDescription(
+        '✅ **Payment Completed Successfully!**\n\nYour RPC access is now active!\n\n🔒 **Your API key has been sent to your DMs for security.**',
+      );
+      embed.addFields(
+        { name: '🌐 Backend URL', value: `\`${this.rpcBackendUrl}\``, inline: false },
+        { name: '⏰ Expires', value: `<t:${expiryTimestamp}:F>`, inline: true },
+        {
+          name: '📊 Tier',
+          value: `${payment.tier} (${payment.duration} day${payment.duration > 1 ? 's' : ''})`,
+          inline: true,
+        },
+        {
+          name: 'ℹ️ Usage',
+          value:
+            'Check your DMs for the API key and add it to your requests using the `X-API-Key` header',
+          inline: false,
+        },
+      );
 
-        await interaction.editReply({ embeds: [embed], components: [] } as any);
-      }
+      await interaction.editReply({ embeds: [embed], components: [] } as any);
     } else {
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()

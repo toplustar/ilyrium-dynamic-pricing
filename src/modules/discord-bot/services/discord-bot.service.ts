@@ -12,6 +12,7 @@ import {
 } from 'discord.js';
 import { AppLogger } from '~/common/services/app-logger.service';
 import { PurchaseService } from './purchase.service';
+import { DiscordNotificationService } from './discord-notification.service';
 
 @Injectable()
 export class DiscordBotService implements OnModuleInit {
@@ -21,6 +22,7 @@ export class DiscordBotService implements OnModuleInit {
   constructor(
     private readonly configService: ConfigService,
     private readonly purchaseService: PurchaseService,
+    private readonly discordNotificationService: DiscordNotificationService,
     logger: AppLogger,
   ) {
     this.logger = logger.forClass('DiscordBotService');
@@ -162,6 +164,20 @@ export class DiscordBotService implements OnModuleInit {
   private async handleButtonInteraction(interaction: any): Promise<void> {
     const { customId } = interaction;
 
+    // Store interaction context for ephemeral messages
+    if (interaction.user) {
+      const user = await this.purchaseService['discordUserService'].getUserByDiscordId(
+        interaction.user.id,
+      );
+      if (user) {
+        this.discordNotificationService.storeUserInteraction(
+          user.id,
+          interaction.user.id,
+          interaction,
+        );
+      }
+    }
+
     if (customId === 'rpc_services') {
       await this.purchaseService.showTierSelection(interaction);
     } else if (customId === 'view_subscriptions') {
@@ -174,6 +190,93 @@ export class DiscordBotService implements OnModuleInit {
       await this.purchaseService.checkPaymentStatus(interaction);
     } else if (customId === 'back_to_tiers') {
       await this.purchaseService.showTierSelection(interaction);
+    }
+  }
+
+  /**
+   * Get Discord client for external services
+   */
+  getClient(): Client | null {
+    return this.client;
+  }
+
+  /**
+   * Send message to purchase services channel
+   */
+  async sendToChannel(
+    messageOptions: { content?: string; embeds?: any[] },
+    targetUserId?: string,
+  ): Promise<void> {
+    try {
+      if (!this.client) {
+        this.logger.error('DiscordClientError', 'Discord client not initialized');
+        return;
+      }
+
+      // Find purchase channel by name pattern
+      const channels = this.client.channels.cache.filter(channel => {
+        if (!channel.isTextBased()) return false;
+        const name = (channel as any).name?.toLowerCase() || '';
+        return name.includes('purchase') || name.includes('buy') || name.includes('service');
+      });
+
+      const targetChannel = channels.first();
+      if (targetChannel?.isTextBased()) {
+        // Add user mention if provided
+        if (targetUserId) {
+          const content = messageOptions.content || '';
+          messageOptions.content = `<@${targetUserId}> ${content}`.trim();
+        }
+
+        await (targetChannel as any).send(messageOptions);
+        this.logger.log('Message sent to purchase channel', {
+          channelId: targetChannel.id,
+          channelName: (targetChannel as any).name,
+          targetUserId,
+        });
+      } else {
+        this.logger.error(
+          'ChannelNotFoundError',
+          'No purchase channel found - create a channel with "purchase", "buy", or "service" in the name',
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        'ChannelMessageError',
+        'Failed to send message to purchase channel',
+        { targetUserId },
+        error as Error,
+      );
+    }
+  }
+
+  /**
+   * Send direct message to a Discord user (kept for backward compatibility)
+   */
+  async sendDirectMessage(
+    discordId: string,
+    messageOptions: { content?: string; embeds?: any[] },
+  ): Promise<void> {
+    try {
+      if (!this.client) {
+        this.logger.error('DiscordClientError', 'Discord client not initialized');
+        return;
+      }
+
+      const user = await this.client.users.fetch(discordId);
+      if (user) {
+        await user.send(messageOptions);
+        this.logger.log('Direct message sent', { discordId, userId: user.username });
+      } else {
+        this.logger.warn('Discord user not found', { discordId });
+      }
+    } catch (error) {
+      this.logger.error(
+        'DirectMessageError',
+        'Failed to send direct message',
+        { discordId },
+        error as Error,
+      );
     }
   }
 }
