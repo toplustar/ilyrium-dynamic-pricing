@@ -33,8 +33,6 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  // Note: GlobalExceptionFilter is registered in app.module.ts via APP_FILTER
-
   // API prefix
   app.setGlobalPrefix('api');
 
@@ -57,7 +55,6 @@ async function bootstrap(): Promise<void> {
   logger.log(`Swagger docs available at: http://localhost:${port}/api-docs`);
 }
 
-bootstrap().catch(error => {
-  console.error('Failed to bootstrap application:', error);
+bootstrap().catch(_error => {
   process.exit(1);
 });

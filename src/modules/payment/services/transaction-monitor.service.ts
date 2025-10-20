@@ -246,12 +246,10 @@ export class TransactionMonitorService implements OnModuleInit {
         return;
       }
 
-      // Mark payment as swept to avoid re-processing
-      await this.paymentService.markPaymentSwept(paymentAttemptId);
+      // Perform the actual sweep
+      await this.paymentService.sweepSinglePayment(payment);
 
-      // TODO: Implement actual sweep transaction here
-      // For now, we just log the intent - you can add actual Solana sweep logic later
-      this.logger.log('✅ Payment marked as swept', {
+      this.logger.log('✅ Immediate sweep completed', {
         paymentAttemptId,
         paymentAddress,
         amountPaid: payment.amountPaid,

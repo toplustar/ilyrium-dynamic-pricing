@@ -450,10 +450,11 @@ export class SolanaService {
 
       // Calculate amount to send (leave some for fee)
       const fee = 5000; // 0.000005 SOL
-      if (balance <= fee) {
+      if (balance < fee) {
         this.logger.debug('Insufficient balance to sweep', {
           address: fromKeypair.publicKey.toBase58(),
           balance: balance / 1e9,
+          fee: fee / 1e9,
         });
         return null; // Not enough to sweep
       }

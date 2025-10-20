@@ -392,7 +392,6 @@ export class AppController {
   })
   async getPaymentStatusByAddress(@Param('paymentAddress') paymentAddress: string): Promise<any> {
     try {
-      // Find payment attempt by address
       const payment = await this.paymentService.getPaymentAttemptByAddress(paymentAddress);
 
       if (!payment) {

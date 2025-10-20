@@ -134,7 +134,6 @@ export class AppService {
 
       if (result === testValue) {
         const responseTime = Date.now() - startTime;
-        // Clean up test key
         await this.cacheManager.del(testKey);
         this.logger.debug('Redis health check passed', { responseTime });
         return {

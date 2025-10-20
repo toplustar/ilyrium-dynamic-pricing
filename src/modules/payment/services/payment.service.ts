@@ -1,6 +1,5 @@
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-// @ts-ignore - TypeORM types
 import { Repository, LessThan, MoreThan, In } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 
@@ -35,6 +34,7 @@ export interface PaymentAttemptResponse {
 export class PaymentService {
   private readonly logger: AppLogger;
   private readonly paymentExpiryMinutes: number;
+  private readonly sweepingPayments = new Set<string>(); // Track payments being swept
   private notificationService?: {
     notifyPaymentReceived: (userId: string, amount: number, remaining: number) => Promise<void>;
     notifyPurchaseComplete: (
@@ -74,7 +74,6 @@ export class PaymentService {
     this.logger = logger.forClass('PaymentService');
     // Payment link expires in 60 minutes (1 hour) by default
     this.paymentExpiryMinutes = this.configService.get<number>('payment.expiryMinutes', 60);
-    // Silence unused method warning for testing
     void this.sweepSinglePayment;
   }
 
@@ -270,7 +269,6 @@ export class PaymentService {
    * Get all pending payment attempts
    */
   async getPendingPaymentAttempts(): Promise<PaymentAttempt[]> {
-    // Only monitor attempts that are still within their expiry window
     return await this.paymentAttemptRepository.find({
       where: [
         { status: PaymentStatus.PENDING, expiresAt: MoreThan(new Date()) },
@@ -380,7 +378,7 @@ export class PaymentService {
     const purchase = this.purchaseRepository.create({
       userId: paymentAttempt.userId,
       paymentAttemptId: paymentAttempt.id,
-      walletAddress: 'telegram-user',
+      walletAddress: 'discord-user',
       tier: paymentAttempt.tier,
       rpsAllocated: tierInfo.rps,
       price: paymentAttempt.amountPaid,
@@ -458,9 +456,7 @@ export class PaymentService {
     });
 
     // Immediately sweep funds to main wallet
-    // TEMPORARILY DISABLED FOR TESTING
-    this.logger.log('🛑 Immediate sweep in completePurchase DISABLED for testing');
-    // await this.sweepSinglePayment(paymentAttempt);
+    await this.sweepSinglePayment(paymentAttempt);
   }
 
   /**
@@ -497,6 +493,14 @@ export class PaymentService {
     let failCount = 0;
 
     for (const payment of paymentsToSweep) {
+      // Skip if already being swept
+      if (this.sweepingPayments.has(payment.id)) {
+        this.logger.debug('Payment already being swept, skipping', {
+          paymentId: payment.id,
+        });
+        continue;
+      }
+
       try {
         const { paymentPrivateKey } = payment;
         if (!paymentPrivateKey) {
@@ -543,7 +547,15 @@ export class PaymentService {
     });
   }
 
-  private async sweepSinglePayment(payment: PaymentAttempt): Promise<void> {
+  async sweepSinglePayment(payment: PaymentAttempt): Promise<void> {
+    // Check if payment is already being swept
+    if (this.sweepingPayments.has(payment.id)) {
+      this.logger.debug('Payment already being swept, skipping', {
+        paymentId: payment.id,
+      });
+      return;
+    }
+
     // Check if payment has a private key (unique address system)
     if (!payment.paymentPrivateKey || !payment.paymentAddress) {
       this.logger.debug('Payment has no private key, skipping immediate sweep', {
@@ -551,6 +563,8 @@ export class PaymentService {
       });
       return;
     }
+
+    this.sweepingPayments.add(payment.id);
 
     const mainWallet = this.configService.get<string>('solana.paymentWallet');
     if (!mainWallet) {
@@ -600,6 +614,8 @@ export class PaymentService {
         error as Error,
       );
       // Don't throw - let the hourly cron retry if this fails
+    } finally {
+      this.sweepingPayments.delete(payment.id);
     }
   }
 

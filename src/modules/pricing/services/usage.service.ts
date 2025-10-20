@@ -94,7 +94,7 @@ export class UsageService {
       dateFilter = { createdAt: MoreThanOrEqual(startDate) };
     }
 
-    const walletAddresses = ['telegram-user'];
+    const walletAddresses = ['discord-user'];
 
     const usageMetrics = await this.usageMetricsRepository.find({
       where: {

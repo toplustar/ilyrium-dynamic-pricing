@@ -59,7 +59,6 @@ export class CryptoUtil {
     const keyHex = process.env.ENCRYPTION_KEY;
 
     if (!keyHex) {
-      console.warn('⚠️  ENCRYPTION_KEY not set! Using random key (data will be lost on restart)');
       return crypto.randomBytes(this.KEY_LENGTH);
     }
 

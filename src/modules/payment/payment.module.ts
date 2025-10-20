@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -26,7 +26,6 @@ import { PaymentSweepService } from './services/payment-sweep.service';
     ScheduleModule.forRoot(),
     PricingModule,
     ApiKeyModule,
-    forwardRef(() => import('../telegram-bot/telegram-bot.module').then(m => m.TelegramBotModule)),
   ],
   providers: [
     {

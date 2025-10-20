@@ -10,7 +10,6 @@ import { DatabaseConfig } from '~/config/database.config';
 import { RedisConfig } from '~/config/redis.config';
 import { MonitoringConfig } from '~/config/monitoring.config';
 import solanaConfig from '~/config/solana.config';
-import telegramConfig from '~/config/telegram.config';
 import paymentConfig from '~/config/payment.config';
 import apiKeyConfig from '~/config/api-key.config';
 import discordConfig from '~/config/discord.config';
@@ -21,7 +20,6 @@ import { CommonModule } from './common/common.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 import { PaymentModule } from './modules/payment/payment.module';
 import { ApiKeyModule } from './modules/api-key/api-key.module';
-import { TelegramBotModule } from './modules/telegram-bot/telegram-bot.module';
 import { DiscordBotModule } from './modules/discord-bot/discord-bot.module';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
@@ -38,7 +36,6 @@ import { AppLogger } from './common/services/app-logger.service';
         RedisConfig,
         MonitoringConfig,
         solanaConfig,
-        telegramConfig,
         paymentConfig,
         apiKeyConfig,
         discordConfig,
@@ -81,7 +78,6 @@ import { AppLogger } from './common/services/app-logger.service';
     PricingModule,
     PaymentModule,
     ApiKeyModule,
-    TelegramBotModule,
     DiscordBotModule,
   ],
   controllers: [AppController],

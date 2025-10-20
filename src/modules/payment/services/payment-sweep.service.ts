@@ -12,7 +12,7 @@ import { PaymentService } from './payment.service';
 @Injectable()
 export class PaymentSweepService implements OnModuleInit {
   private readonly logger: AppLogger;
-  private readonly isSweeping = false;
+  private isSweeping = false;
 
   constructor(
     private readonly paymentService: PaymentService,
@@ -35,6 +35,7 @@ export class PaymentSweepService implements OnModuleInit {
       return;
     }
 
+    this.isSweeping = true;
     this.logger.log('🔄 Starting auto-sweep of completed payments...');
 
     try {
@@ -42,6 +43,8 @@ export class PaymentSweepService implements OnModuleInit {
       this.logger.log('✅ Auto-sweep completed successfully');
     } catch (error) {
       this.logger.error('AutoSweepError', 'Failed to auto-sweep payments', {}, error as Error);
+    } finally {
+      this.isSweeping = false;
     }
   }
 

@@ -34,6 +34,13 @@ export class AddUniquePaymentAddress1760400000000 implements MigrationInterface 
       DROP INDEX "IDX_PAYMENT_ATTEMPTS_PAYMENT_ADDRESS";
     `);
 
+    // Update null memo values to unique values before setting NOT NULL
+    await queryRunner.query(`
+      UPDATE "payment_attempts" 
+      SET "memo" = 'legacy' || substring(id::text, 1, 5)
+      WHERE "memo" IS NULL;
+    `);
+
     // Restore memo as NOT NULL
     await queryRunner.query(`
       ALTER TABLE "payment_attempts"
