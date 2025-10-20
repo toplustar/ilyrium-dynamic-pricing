@@ -23,8 +23,6 @@ export class TransactionMonitorService implements OnModuleInit {
     this.logger = logger.forClass('TransactionMonitorService');
     // Faster monitoring: 5 seconds instead of 10 to beat external sweep
     this.pollInterval = this.configService.get<number>('payment.pollInterval', 5000);
-    // Silence unused method warning for testing
-    void this.triggerImmediateSweep;
   }
 
   onModuleInit(): void {
@@ -173,25 +171,17 @@ export class TransactionMonitorService implements OnModuleInit {
     }
 
     // If payment completed, trigger immediate sweep of funds to main wallet
-    // TEMPORARILY DISABLED FOR TESTING
     if (paymentCompleted) {
-      this.logger.log(
-        '🛑 Immediate sweep DISABLED for testing - funds will remain in payment address',
-        {
-          paymentAttemptId,
-          paymentAddress,
-        },
-      );
-      // try {
-      //   await this.triggerImmediateSweep(paymentAddress, paymentAttemptId);
-      // } catch (error) {
-      //   this.logger.error(
-      //     'SweepError',
-      //     `Failed to sweep completed payment`,
-      //     { paymentAttemptId, paymentAddress },
-      //     error as Error,
-      //   );
-      // }
+      try {
+        await this.triggerImmediateSweep(paymentAddress, paymentAttemptId);
+      } catch (error) {
+        this.logger.error(
+          'SweepError',
+          `Failed to sweep completed payment`,
+          { paymentAttemptId, paymentAddress },
+          error as Error,
+        );
+      }
     }
   }
 
@@ -238,9 +228,7 @@ export class TransactionMonitorService implements OnModuleInit {
 
   /**
    * Immediately sweep completed payment to main wallet
-   * TEMPORARILY DISABLED FOR TESTING
    */
-  // @ts-ignore - Temporarily disabled for testing
   private async triggerImmediateSweep(
     paymentAddress: string,
     paymentAttemptId: string,

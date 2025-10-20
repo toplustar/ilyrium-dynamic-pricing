@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
-// import { Cron, CronExpression } from '@nestjs/schedule'; // Temporarily disabled
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 import { AppLogger } from '~/common/services/app-logger.service';
 
@@ -15,51 +15,42 @@ export class PaymentSweepService implements OnModuleInit {
   private readonly isSweeping = false;
 
   constructor(
-    // @ts-ignore - Temporarily disabled for testing
     private readonly paymentService: PaymentService,
     logger: AppLogger,
   ) {
     this.logger = logger.forClass('PaymentSweepService');
-    // Silence unused variable warning for testing
-    void this.paymentService;
   }
 
   onModuleInit(): void {
-    this.logger.log('🛑 Payment sweep service initialized - SWEEPING DISABLED FOR TESTING');
+    this.logger.log('✅ Payment sweep service initialized - Auto-sweep enabled');
   }
 
   /**
    * Auto-sweep completed payments every hour
-   * TEMPORARILY DISABLED FOR TESTING
    */
-  // @Cron(CronExpression.EVERY_HOUR)
-  autoSweepPayments(): void {
-    this.logger.log('🛑 Auto-sweep is DISABLED for testing purposes');
-    return;
+  @Cron(CronExpression.EVERY_HOUR)
+  async autoSweepPayments(): Promise<void> {
+    if (this.isSweeping) {
+      this.logger.debug('Sweep already in progress, skipping');
+      return;
+    }
 
-    // Commented out for testing
-    // if (this.isSweeping) {
-    //   this.logger.debug('Sweep already in progress, skipping');
-    //   return;
-    // }
+    this.logger.log('🔄 Starting auto-sweep of completed payments...');
 
-    // this.isSweeping = true;
-
-    // try {
-    //   await this.paymentService.sweepCompletedPayments();
-    // } catch (error) {
-    //   this.logger.error('AutoSweepError', 'Failed to auto-sweep payments', {}, error as Error);
-    // } finally {
-    //   this.isSweeping = false;
-    // }
+    try {
+      await this.paymentService.sweepCompletedPayments();
+      this.logger.log('✅ Auto-sweep completed successfully');
+    } catch (error) {
+      this.logger.error('AutoSweepError', 'Failed to auto-sweep payments', {}, error as Error);
+    }
   }
 
   /**
    * Manual trigger for sweeping (for admin use)
    */
-  triggerManualSweep(): void {
+  async triggerManualSweep(): Promise<void> {
     this.logger.log('Manual sweep triggered');
-    this.autoSweepPayments();
+    await this.autoSweepPayments();
   }
 
   /**
