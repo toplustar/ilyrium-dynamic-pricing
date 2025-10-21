@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { AppLogger } from '~/common/services/app-logger.service';
 import { PaymentService } from '~/modules/payment/services/payment.service';
 import { UsageService } from '~/modules/pricing/services/usage.service';
+import { TierConfigInterface } from '~/config/tier.config';
 
 import { DiscordUserService } from './discord-user.service';
 import { DiscordNotificationService } from './discord-notification.service';
@@ -24,27 +25,22 @@ export class PurchaseService {
     logger: AppLogger,
   ) {
     this.logger = logger.forClass('PurchaseService');
-    this.rpcBackendUrl = this.configService.get<string>(
-      'app.rpcBackendUrl',
-      'http://localhost:3000',
-    );
+    this.rpcBackendUrl =
+      this.configService.get<string>('urls.rpcBackendUrl') || 'http://localhost:3000';
   }
 
   async showTierSelection(interaction: ButtonInteraction): Promise<void> {
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId('tier:Basic')
-        .setLabel('Basic (10 r/s)')
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId('tier:Ultra')
-        .setLabel('Ultra (25 r/s)')
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId('tier:Elite')
-        .setLabel('Elite (50 r/s)')
-        .setStyle(ButtonStyle.Success),
-    );
+    const tierConfig = this.configService.get('tiers') as { tiers: TierConfigInterface[] };
+
+    const row = new ActionRowBuilder<ButtonBuilder>();
+    tierConfig.tiers.forEach(tier => {
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`tier:${tier.name}`)
+          .setLabel(`${tier.name} (${tier.rps} r/s)`)
+          .setStyle(ButtonStyle.Success),
+      );
+    });
 
     await interaction.reply({
       content: 'What tier would you like to purchase? You can choose from:',
@@ -263,12 +259,9 @@ ${payment.amountExpected} SOL
   }
 
   private getTierEmoji(tier: string): string {
-    const emojis: Record<string, string> = {
-      Basic: '📊',
-      Ultra: '⚡',
-      Elite: '💎',
-    };
-    return emojis[tier] || '📦';
+    const tierConfig = this.configService.get('tiers') as { tiers: TierConfigInterface[] };
+    const tierInfo = tierConfig.tiers.find(t => t.name === tier);
+    return tierInfo?.emoji || '📦';
   }
 
   private getStatusText(status: string): string {

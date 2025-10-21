@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import * as compression from 'compression';
 
@@ -51,8 +52,12 @@ async function bootstrap(): Promise<void> {
   const port = process.env.PORT || 3000;
   await app.listen(port);
 
-  logger.log(`Application is running on: http://localhost:${port}`);
-  logger.log(`Swagger docs available at: http://localhost:${port}/api-docs`);
+  const configService = app.get(ConfigService);
+  const baseUrl = configService.get<string>('urls.baseUrl');
+  const swaggerUrl = configService.get<string>('urls.swaggerUrl');
+
+  logger.log(`Application is running on: ${baseUrl}`);
+  logger.log(`Swagger docs available at: ${swaggerUrl}`);
 }
 
 bootstrap().catch(_error => {

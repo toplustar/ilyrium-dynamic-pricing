@@ -7,24 +7,28 @@ A high-performance **Dynamic Pricing API** built with NestJS that implements a s
 ## Key Features
 
 ### 🎯 Dynamic Pricing Engine
+
 - Real-time price calculation based on system utilization
 - Configurable price ranges (min/max) and total capacity
 - Automatic price adjustment as demand changes
 - Transparent pricing model for users
 
 ### 💰 Tiered Subscription System
+
 - **Starter**: 10 RPS - Ideal for development and testing
 - **Developer**: 50 RPS - Perfect for small applications
 - **Professional**: 200 RPS - For production applications
 - **Enterprise**: 1000 RPS - High-volume production workloads
 
 ### 📊 Usage Tracking & Metrics
+
 - Real-time usage monitoring per wallet
 - Historical usage data (30-day retention)
 - Active purchase tracking
 - Rate allocation and utilization analytics
 
 ### 🔒 Security & Performance
+
 - Redis-based rate limiting
 - JWT authentication support
 - Request/response logging
@@ -32,6 +36,7 @@ A high-performance **Dynamic Pricing API** built with NestJS that implements a s
 - Comprehensive error handling with unique error IDs
 
 ### 🏗️ Enterprise Architecture
+
 - Built with NestJS framework
 - TypeORM for database operations
 - Redis caching layer
@@ -42,16 +47,19 @@ A high-performance **Dynamic Pricing API** built with NestJS that implements a s
 ## Technology Stack
 
 ### Core
+
 - **NestJS 10.4.4** - Progressive Node.js framework
 - **TypeScript 5.6.2** - Type-safe JavaScript
 - **Node.js >=24.6.0** - JavaScript runtime
 
 ### Database & Caching
+
 - **PostgreSQL** - Relational database via TypeORM
 - **Redis** - Caching and rate limiting
 - **TypeORM 0.3.20** - ORM with migrations support
 
 ### Security & Validation
+
 - **Helmet** - Security headers
 - **CORS** - Cross-origin resource sharing
 - **Passport JWT** - Authentication
@@ -59,10 +67,12 @@ A high-performance **Dynamic Pricing API** built with NestJS that implements a s
 - **Rate Limiting** - Redis-based request throttling
 
 ### Monitoring & Logging
+
 - **Application Insights** - Azure monitoring and telemetry
 - **Custom Loggers** - Console and AppLogger services
 
 ### Development Tools
+
 - **ESLint** - Code linting
 - **Prettier** - Code formatting
 - **Husky** - Git hooks
@@ -150,21 +160,22 @@ npm run db:migration:run
 npm run start:dev
 ```
 
-The API will be available at `http://localhost:3000`
+The API will be available at `http://65.109.56.146:3000`
 
 ### API Documentation
 
 Once running, access the Swagger documentation at:
-- **Swagger UI**: http://localhost:3000/api-docs
+
+- **Swagger UI**: http://65.109.56.146:3000/api-docs
 
 ### Quick Test
 
 ```bash
 # Check health
-curl http://localhost:3000/health
+curl http://65.109.56.146:3000/health
 
 # Get pricing tiers
-curl http://localhost:3000/api/pricing/tiers
+curl http://65.109.56.146:3000/api/pricing/tiers
 ```
 
 ### Available Scripts
@@ -195,13 +206,16 @@ npm run cache:clear        # Clear Redis cache
 ### Core Endpoints
 
 #### Health Check
+
 - **GET** `/health` - Service health status
 
 #### Pricing Information
+
 - **GET** `/api/pricing/tiers` - Get available pricing tiers with current prices
   - Returns dynamic pricing based on current system utilization
 
 #### Purchase Management
+
 - **POST** `/api/purchase/buy-tier` - Purchase a pricing tier
   ```json
   {
@@ -212,10 +226,12 @@ npm run cache:clear        # Clear Redis cache
   ```
 
 #### Usage Tracking
+
 - **GET** `/api/usage?walletAddress={address}` - Get usage metrics for a wallet
   - Returns allocation details, usage stats, and recent activity
 
 ### API Documentation
+
 - **GET** `/api-docs` - Interactive Swagger UI documentation
 
 ## How It Works
@@ -281,16 +297,19 @@ getTiers(): Omit<TierInfo, 'price'>[] {
 ### Main Tables
 
 **purchases**
+
 - Tracks tier purchases by wallet address
 - Stores RPS allocation and expiration
 - Automatically managed by TypeORM
 
 **usage_metrics**
+
 - Records API usage per wallet
 - Tracks request counts and endpoints
 - Partitioned by timestamp for performance
 
 **system_metrics**
+
 - Stores system-wide utilization metrics
 - Used for dynamic pricing calculations
 - Updated on each purchase
@@ -309,6 +328,7 @@ The project enforces code quality through:
 ### Custom ESLint Rules
 
 Located in `eslint-rules/`:
+
 - `consistent-file-naming.js` - Enforce kebab-case file naming
 - `dto-validation-rules.js` - Ensure DTOs have validation decorators
 - `no-db-queries-outside-services.js` - Prevent repository usage in controllers
@@ -342,6 +362,7 @@ npm run test:cov
 ### Environment-Specific Configs
 
 The app automatically adjusts based on `NODE_ENV`:
+
 - `local`: Console logging, no SSL, relaxed CORS
 - `dev`/`stg`: Mixed logging, optional SSL
 - `prd`: Application Insights only, SSL required, strict CORS
@@ -351,6 +372,7 @@ The app automatically adjusts based on `NODE_ENV`:
 See [SETUP.md](SETUP.md#troubleshooting) for detailed troubleshooting guides.
 
 **Common Issues:**
+
 - Port 3000 in use: Run `npm run start:dev` (auto-kills port)
 - Database connection: Check PostgreSQL is running and credentials are correct
 - Redis connection: Verify Redis is running with `redis-cli ping`
@@ -370,6 +392,7 @@ MIT
 ## Support
 
 For issues and questions:
+
 1. Check [SETUP.md](SETUP.md) and troubleshooting guides
 2. Review error logs and Application Insights
 3. Verify all prerequisites are correctly installed

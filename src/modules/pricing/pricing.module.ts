@@ -5,7 +5,6 @@ import { AppLogger } from '~/common/services/app-logger.service';
 
 import { Purchase } from './entities/purchase.entity';
 import { UsageMetrics } from './entities/usage-metrics.entity';
-import { SystemMetrics } from './entities/system-metrics.entity';
 import { PricingEngineService } from './services/pricing-engine.service';
 import { PurchaseService } from './services/purchase.service';
 import { UsageService } from './services/usage.service';
@@ -14,7 +13,7 @@ import { PurchaseController } from './controllers/purchase.controller';
 import { UsageController } from './controllers/usage.controller';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Purchase, UsageMetrics, SystemMetrics])],
+  imports: [TypeOrmModule.forFeature([Purchase, UsageMetrics])],
   controllers: [PricingController, PurchaseController, UsageController],
   providers: [
     {

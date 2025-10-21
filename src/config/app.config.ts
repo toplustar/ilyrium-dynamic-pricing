@@ -4,7 +4,7 @@ export const AppConfig = registerAs('app', () => ({
   port: parseInt(process.env.PORT as string, 10) || 3000,
   environment: process.env.NODE_ENV || 'local',
   rpcBackendUrl: process.env.RPC_BACKEND_URL as string,
-  rpcEndpoint: process.env.RPC_ENDPOINT || 'elite.rpc.solanavibestation.com',
+  rpcEndpoint: process.env.RPC_ENDPOINT || 'api.mainnet-beta.solana.com',
   jwt: {
     secret: process.env.JWT_SECRET as string,
     expiresIn: process.env.JWT_EXPIRES_IN ?? '1h',

@@ -6,6 +6,7 @@ import { AppService, HealthCheckResponse } from './app.service';
 import { DiscordBotService } from './modules/discord-bot/services/discord-bot.service';
 import { PaymentService } from './modules/payment/services/payment.service';
 import { PaymentStatus } from './modules/payment/entities/payment-attempt.entity';
+import { RpcService } from './modules/rpc/services/rpc.service';
 
 @ApiTags('App')
 @Controller()
@@ -15,6 +16,7 @@ export class AppController {
     private readonly discordBotService: DiscordBotService,
     private readonly configService: ConfigService,
     private readonly paymentService: PaymentService,
+    private readonly rpcService: RpcService,
   ) {}
 
   @Get('health')
@@ -514,7 +516,7 @@ export class AppController {
         },
         instructions: {
           usage: 'Add the API key to your requests using the X-API-Key header',
-          backend_url: this.configService.get<string>('app.rpcBackendUrl', 'http://localhost:3000'),
+          backend_url: this.configService.get<string>('urls.rpcBackendUrl'),
           important: '⚠️ This is the only time you will see the full API key. Save it securely!',
         },
       };
@@ -525,5 +527,83 @@ export class AppController {
         error: error.message,
       };
     }
+  }
+
+  @Get('rpc-info')
+  @ApiOperation({
+    summary: 'Get RPC Gateway Information',
+    description: 'Returns information about the RPC gateway configuration and status',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'RPC gateway information',
+    schema: {
+      type: 'object',
+      properties: {
+        endpoint: { type: 'string', description: 'RPC endpoint URL' },
+        hasApiKey: { type: 'boolean', description: 'Whether API key is configured' },
+        rateLimit: { type: 'number', description: 'Rate limit per second' },
+        timeout: { type: 'number', description: 'Request timeout in milliseconds' },
+        usage: {
+          type: 'object',
+          properties: {
+            endpoint: { type: 'string', description: 'RPC endpoint for client usage' },
+            authentication: { type: 'string', description: 'Authentication method' },
+            example: {
+              type: 'object',
+              properties: {
+                method: { type: 'string', example: 'POST' },
+                url: { type: 'string', example: '/api/rpc' },
+                headers: {
+                  type: 'object',
+                  properties: {
+                    'X-API-Key': { type: 'string', description: 'Your API key' },
+                    'Content-Type': { type: 'string', example: 'application/json' },
+                  },
+                },
+                body: {
+                  type: 'object',
+                  properties: {
+                    jsonrpc: { type: 'string', example: '2.0' },
+                    method: { type: 'string', example: 'getBalance' },
+                    params: { type: 'array', example: ['your_wallet_address'] },
+                    id: { type: 'number', example: 1 },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+  getRpcInfo(): any {
+    const endpointInfo = this.rpcService.getEndpointInfo();
+    const rpcBackendUrl = this.configService.get<string>('urls.rpcBackendUrl');
+
+    return {
+      endpoint: endpointInfo.endpoint,
+      hasApiKey: endpointInfo.hasApiKey,
+      rateLimit: this.configService.get<number>('rpc.rateLimit', 500),
+      timeout: this.configService.get<number>('rpc.timeout', 30000),
+      usage: {
+        endpoint: `${rpcBackendUrl}/api/rpc`,
+        authentication: 'X-API-Key header required',
+        example: {
+          method: 'POST',
+          url: '/api/rpc',
+          headers: {
+            'X-API-Key': 'your_api_key_here',
+            'Content-Type': 'application/json',
+          },
+          body: {
+            jsonrpc: '2.0',
+            method: 'getBalance',
+            params: ['your_wallet_address'],
+            id: 1,
+          },
+        },
+      },
+    };
   }
 }

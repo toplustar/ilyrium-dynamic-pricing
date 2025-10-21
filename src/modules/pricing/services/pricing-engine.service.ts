@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThanOrEqual } from 'typeorm';
+import { Repository, MoreThanOrEqual, Not, IsNull } from 'typeorm';
 
 import { AppCacheService } from '~/common/services/app-cache.service';
+import { TierConfigInterface } from '~/config/tier.config';
+import { PricingConfigInterface } from '~/config/pricing.config';
 
 import { Purchase } from '../entities/purchase.entity';
-import { SystemMetrics } from '../entities/system-metrics.entity';
 
 export interface PricingParams {
   usedRps: number;
@@ -27,18 +28,22 @@ export class PricingEngineService {
   private readonly priceMin: number;
   private readonly priceMax: number;
   private readonly totalRps: number;
+  private readonly cacheTtl: number;
 
   constructor(
     @InjectRepository(Purchase)
     private readonly purchaseRepository: Repository<Purchase>,
-    @InjectRepository(SystemMetrics)
-    private readonly systemMetricsRepository: Repository<SystemMetrics>,
     private readonly cacheService: AppCacheService,
     private readonly configService: ConfigService,
   ) {
-    this.priceMin = this.configService.get<number>('app.priceMin', 0.001);
-    this.priceMax = this.configService.get<number>('app.priceMax', 0.01);
-    this.totalRps = this.configService.get<number>('app.totalRps', 10000);
+    const pricingConfig = this.configService.get<PricingConfigInterface>('pricing');
+    if (!pricingConfig) {
+      throw new Error('Pricing configuration not found');
+    }
+    this.priceMin = pricingConfig.priceMin;
+    this.priceMax = pricingConfig.priceMax;
+    this.totalRps = pricingConfig.totalRps;
+    this.cacheTtl = pricingConfig.cacheTtl;
   }
 
   /**
@@ -60,65 +65,32 @@ export class PricingEngineService {
   }
 
   async getCurrentUtilization(): Promise<number> {
-    const cached = await this.cacheService.get<string>('system:used_rps');
-
-    if (cached) {
-      return parseInt(cached, 10);
-    }
-
+    // Always get fresh data from database to ensure accuracy
+    // Only count purchases that have been actually paid for (have payment_attempt_id)
     const activePurchases = await this.purchaseRepository.find({
       where: {
         isActive: true,
         expiresAt: MoreThanOrEqual(new Date()),
+        paymentAttemptId: Not(IsNull()), // Only paid purchases
       },
       select: ['rpsAllocated'],
     });
 
     const usedRps = activePurchases.reduce((sum, p) => sum + p.rpsAllocated, 0);
 
-    await this.cacheService.set('system:used_rps', usedRps.toString(), 60);
+    // Update cache with fresh data
+    await this.cacheService.set('system:used_rps', usedRps.toString(), this.cacheTtl * 1000);
 
     return usedRps;
   }
 
   getTiers(): Omit<TierInfo, 'price'>[] {
-    return [
-      {
-        name: 'Starter',
-        rps: 10,
-        description: 'Perfect for testing and small applications',
-      },
-      {
-        name: 'Developer',
-        rps: 50,
-        description: 'Ideal for development and prototyping',
-      },
-      {
-        name: 'Professional',
-        rps: 200,
-        description: 'For production applications',
-      },
-      {
-        name: 'Enterprise',
-        rps: 1000,
-        description: 'High-performance for large-scale operations',
-      },
-      {
-        name: 'Basic',
-        rps: 10,
-        description: 'Perfect for testing and small applications',
-      },
-      {
-        name: 'Ultra',
-        rps: 50,
-        description: 'For production applications',
-      },
-      {
-        name: 'Elite',
-        rps: 200,
-        description: 'High-performance for large-scale operations',
-      },
-    ];
+    const tierConfig = this.configService.get('tiers') as { tiers: TierConfigInterface[] };
+    return tierConfig.tiers.map(tier => ({
+      name: tier.name,
+      rps: tier.rps,
+      description: tier.description,
+    }));
   }
 
   /**
@@ -142,16 +114,19 @@ export class PricingEngineService {
   }
 
   async updateUtilization(deltaRps: number): Promise<void> {
+    // Get fresh utilization from database
     const currentUsed = await this.getCurrentUtilization();
     const newUsed = Math.max(0, currentUsed + deltaRps);
 
-    await this.cacheService.set('system:used_rps', newUsed.toString(), 60);
+    // Update cache with new value
+    await this.cacheService.set('system:used_rps', newUsed.toString(), this.cacheTtl * 1000);
+  }
 
-    await this.systemMetricsRepository.save({
-      totalRps: this.totalRps,
-      usedRps: newUsed,
-      utilization: newUsed / this.totalRps,
-    });
+  /**
+   * Clear the utilization cache to force fresh calculation
+   */
+  async clearUtilizationCache(): Promise<void> {
+    await this.cacheService.del('system:used_rps');
   }
 
   getTotalRps(): number {
