@@ -190,6 +190,15 @@ export class DiscordBotService implements OnModuleInit {
       await this.purchaseService.checkPaymentStatus(interaction);
     } else if (customId === 'back_to_tiers') {
       await this.purchaseService.showTierSelection(interaction);
+    } else if (customId.startsWith('regenerate_key:')) {
+      await this.purchaseService.handleKeyRegeneration(interaction);
+    } else if (customId.startsWith('confirm_regenerate:')) {
+      await this.purchaseService.confirmKeyRegeneration(interaction);
+    } else if (customId === 'cancel_regenerate') {
+      await interaction.reply({
+        content: '❌ Key regeneration cancelled.',
+        ephemeral: true,
+      });
     }
   }
 

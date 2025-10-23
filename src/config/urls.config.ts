@@ -22,7 +22,7 @@ export const UrlsConfig = registerAs('urls', () => {
 
   return {
     // External URLs - these should be configurable
-    rpcBackendUrl: process.env.RPC_BACKEND_URL || baseUrl,
+    rpcBackendUrl: process.env.RPC_BACKEND_URL || `${baseUrl}/api/rpc`,
 
     // Internal URLs (constructed from host/port)
     baseUrl,

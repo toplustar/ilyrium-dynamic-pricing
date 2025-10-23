@@ -109,6 +109,12 @@ export class AppController {
     return this.appService.getHello();
   }
 
+  @Get('favicon.ico')
+  @ApiOperation({ summary: 'Favicon handler' })
+  getFavicon(): string {
+    return 'No favicon available';
+  }
+
   @Get('init-discord-channel')
   @ApiOperation({
     summary: 'Initialize Discord purchase channel',

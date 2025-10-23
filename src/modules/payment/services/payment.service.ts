@@ -429,7 +429,7 @@ export class PaymentService {
           expiresAt: generatedApiKey.expiresAt,
           amountPaid: paymentAttempt.amountPaid,
           backendUrl:
-            this.configService.get<string>('urls.rpcBackendUrl') || 'http://localhost:3000',
+            this.configService.get<string>('urls.rpcBackendUrl') || 'http://localhost:3000/api/rpc',
         },
       );
 

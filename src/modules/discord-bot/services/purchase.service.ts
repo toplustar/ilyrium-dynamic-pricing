@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { AppLogger } from '~/common/services/app-logger.service';
 import { PaymentService } from '~/modules/payment/services/payment.service';
 import { UsageService } from '~/modules/pricing/services/usage.service';
+import { ApiKeyService } from '~/modules/api-key/services/api-key.service';
 import { TierConfigInterface } from '~/config/tier.config';
 
 import { DiscordUserService } from './discord-user.service';
@@ -22,11 +23,12 @@ export class PurchaseService {
     private readonly discordNotificationService: DiscordNotificationService,
     private readonly paymentService: PaymentService,
     private readonly usageService: UsageService,
+    private readonly apiKeyService: ApiKeyService,
     logger: AppLogger,
   ) {
     this.logger = logger.forClass('PurchaseService');
     this.rpcBackendUrl =
-      this.configService.get<string>('urls.rpcBackendUrl') || 'http://localhost:3000';
+      this.configService.get<string>('urls.rpcBackendUrl') || 'http://localhost:3000/api/rpc';
   }
 
   async showTierSelection(interaction: ButtonInteraction): Promise<void> {
@@ -217,45 +219,313 @@ ${payment.amountExpected} SOL
   }
 
   async showActiveSubscriptions(interaction: ButtonInteraction): Promise<void> {
-    const discordId = interaction.user.id;
-    const user = await this.discordUserService.getUserByDiscordId(discordId);
+    try {
+      const discordId = interaction.user.id;
+      const user = await this.discordUserService.getUserByDiscordId(discordId);
 
-    if (!user) {
+      if (!user) {
+        await interaction.reply({
+          content: '❌ You need to make a purchase first!',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const purchases = await this.usageService.getActivePurchases(user.id);
+      const activeApiKeys = await this.getActiveApiKeys(user.id);
+
+      if (purchases.length === 0 && activeApiKeys.length === 0) {
+        await interaction.reply({
+          content: '📭 You have no active subscriptions. Click "RPC Services" to purchase!',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const { embed, components } = this.createSubscriptionsEmbed(user, purchases, activeApiKeys);
       await interaction.reply({
-        content: '❌ You need to make a purchase first!',
+        embeds: [embed],
+        components: components.length > 0 ? components : undefined,
+        ephemeral: true,
+      } as any);
+
+      this.logger.log('Active subscriptions shown', {
+        userId: user.id,
+        discordId: interaction.user.id,
+        activePurchases: purchases.length,
+        activeApiKeys: activeApiKeys.length,
+      });
+    } catch (error) {
+      this.logger.error(
+        'ShowSubscriptionsError',
+        'Failed to show active subscriptions',
+        {},
+        error as Error,
+      );
+
+      await interaction.reply({
+        content:
+          '❌ Sorry, something went wrong while fetching your subscriptions. Please try again later.',
         ephemeral: true,
       });
-      return;
     }
+  }
 
-    const purchases = await this.usageService.getActivePurchases(user.id);
+  private async getActiveApiKeys(userId: string): Promise<any[]> {
+    const userApiKeys = await this.apiKeyService.getUserApiKeys(userId);
+    return userApiKeys.filter(key => key.isActive && key.expiresAt > new Date() && !key.revokedAt);
+  }
 
-    if (purchases.length === 0) {
-      await interaction.reply({
-        content: '📭 You have no active subscriptions. Click "RPC Services" to purchase!',
-        ephemeral: true,
-      });
-      return;
-    }
-
-    const totalRps = purchases.reduce((sum, p) => sum + Number(p.rpsAllocated), 0);
+  private createSubscriptionsEmbed(
+    user: any,
+    purchases: any[],
+    activeApiKeys: any[],
+  ): { embed: EmbedBuilder; components: ActionRowBuilder<ButtonBuilder>[] } {
+    const totalRps = purchases.reduce((sum: number, p: any) => sum + Number(p.rpsAllocated), 0);
 
     const embed = new EmbedBuilder()
       .setColor(0x00ff00)
       .setTitle('📋 Your Active Subscriptions')
       .setDescription(`Total Allocated RPS: **${totalRps}**`)
-      .setTimestamp();
+      .setTimestamp()
+      .setFooter({ text: `User: ${user.username || 'Unknown'}` });
 
-    for (const purchase of purchases) {
-      const expiryTimestamp = Math.floor(purchase.expiresAt.getTime() / 1000);
+    // Add active purchases
+    if (purchases.length > 0) {
+      for (const purchase of purchases) {
+        const expiryTimestamp = Math.floor(purchase.expiresAt.getTime() / 1000);
+        embed.addFields({
+          name: `${this.getTierEmoji(purchase.tier)} ${purchase.tier}`,
+          value: `RPS: ${purchase.rpsAllocated}\n💰 Price: $${purchase.price}\nExpires: <t:${expiryTimestamp}:R>`,
+          inline: true,
+        });
+      }
+    }
+
+    // Add active API keys
+    if (activeApiKeys.length > 0) {
+      const apiKeysText = this.formatApiKeysText(activeApiKeys);
       embed.addFields({
-        name: `${this.getTierEmoji(purchase.tier)} ${purchase.tier}`,
-        value: `RPS: ${purchase.rpsAllocated}\nExpires: <t:${expiryTimestamp}:R>`,
-        inline: true,
+        name: '🔑 Active API Keys',
+        value: apiKeysText,
+        inline: false,
       });
     }
 
-    await interaction.reply({ embeds: [embed], ephemeral: true } as any);
+    // Add backend URL information
+    embed.addFields({
+      name: '🌐 Backend URL',
+      value: `\`${this.rpcBackendUrl}\``,
+      inline: false,
+    });
+
+    // Create buttons for showing full API keys
+    const components = this.createApiKeyButtons(activeApiKeys);
+
+    return { embed, components };
+  }
+
+  private createApiKeyButtons(activeApiKeys: any[]): ActionRowBuilder<ButtonBuilder>[] {
+    const components: ActionRowBuilder<ButtonBuilder>[] = [];
+
+    if (activeApiKeys.length === 0) {
+      return components;
+    }
+
+    // Create buttons for each API key (max 5 per row, Discord limit)
+    for (let i = 0; i < activeApiKeys.length; i += 5) {
+      const row = new ActionRowBuilder<ButtonBuilder>();
+      const keysInRow = activeApiKeys.slice(i, i + 5);
+
+      for (const apiKey of keysInRow) {
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`regenerate_key:${apiKey.id}`)
+            .setLabel(`Regenerate ${apiKey.name || 'Key'}`)
+            .setStyle(ButtonStyle.Danger)
+            .setEmoji('🔄'),
+        );
+      }
+
+      components.push(row);
+    }
+
+    return components;
+  }
+
+  private formatApiKeysText(activeApiKeys: any[]): string {
+    let apiKeysText = '';
+    for (const apiKey of activeApiKeys) {
+      const expiresIn = Math.ceil(
+        (apiKey.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+      );
+      apiKeysText += `**${apiKey.keyPrefix}*****` + '*'.repeat(20) + `\n`;
+      apiKeysText += `🔑 Name: ${apiKey.name || 'Unnamed'}\n`;
+      apiKeysText += `⏰ Expires in: ${expiresIn} days\n`;
+      if (apiKey.lastUsedAt) {
+        apiKeysText += `🕒 Last used: ${apiKey.lastUsedAt.toLocaleDateString()}\n`;
+      }
+      apiKeysText += '\n';
+    }
+    return apiKeysText || 'No active API keys';
+  }
+
+  /**
+   * Handle API key regeneration with confirmation
+   */
+  async handleKeyRegeneration(interaction: ButtonInteraction): Promise<void> {
+    try {
+      const keyId = interaction.customId.split(':')[1];
+      const discordUser = await this.discordUserService.getUserByDiscordId(interaction.user.id);
+
+      if (!discordUser) {
+        await interaction.reply({
+          content: '❌ You are not registered in our system.',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      // Get the existing API key
+      const existingKey = await this.apiKeyService.getUserApiKeys(discordUser.id);
+      const targetKey = existingKey.find(key => key.id === keyId);
+
+      if (!targetKey) {
+        await interaction.reply({
+          content: '❌ API key not found or you do not have permission to access it.',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      // Create confirmation embed
+      const confirmEmbed = new EmbedBuilder()
+        .setTitle('⚠️ Regenerate API Key')
+        .setColor(0xff9900)
+        .setDescription(
+          `**Warning:** This action will **permanently invalidate** your current API key:\n` +
+            `\`${targetKey.keyPrefix}*****\`\n\n` +
+            `**This action cannot be undone!**\n` +
+            `Any applications using this key will stop working immediately.\n\n` +
+            `Do you want to continue?`,
+        )
+        .setFooter({ text: 'This will generate a new key and show it to you once.' });
+
+      const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`confirm_regenerate:${keyId}`)
+          .setLabel('Yes, Regenerate')
+          .setStyle(ButtonStyle.Danger)
+          .setEmoji('⚠️'),
+        new ButtonBuilder()
+          .setCustomId('cancel_regenerate')
+          .setLabel('Cancel')
+          .setStyle(ButtonStyle.Secondary)
+          .setEmoji('❌'),
+      );
+
+      await interaction.reply({
+        embeds: [confirmEmbed],
+        components: [confirmRow],
+        ephemeral: true,
+      } as any);
+    } catch (error) {
+      this.logger.error(
+        'KeyRegenerationError',
+        'Failed to handle key regeneration',
+        {},
+        error as Error,
+      );
+
+      await interaction.reply({
+        content: '❌ Sorry, something went wrong. Please try again later.',
+        ephemeral: true,
+      });
+    }
+  }
+
+  /**
+   * Confirm and execute API key regeneration
+   */
+  async confirmKeyRegeneration(interaction: ButtonInteraction): Promise<void> {
+    try {
+      const keyId = interaction.customId.split(':')[1];
+      const discordUser = await this.discordUserService.getUserByDiscordId(interaction.user.id);
+
+      if (!discordUser) {
+        await interaction.reply({
+          content: '❌ You are not registered in our system.',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      // Get the existing API key to preserve metadata
+      const existingKeys = await this.apiKeyService.getUserApiKeys(discordUser.id);
+      const targetKey = existingKeys.find(key => key.id === keyId);
+
+      if (!targetKey) {
+        await interaction.reply({
+          content: '❌ API key not found.',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      // Deactivate the old key
+      if (keyId) {
+        await this.apiKeyService.revokeApiKey(keyId);
+      }
+
+      // Create a new API key with the same metadata
+      const newKey = await this.apiKeyService.createApiKey(
+        discordUser.id,
+        targetKey.name || undefined,
+        targetKey.expiresAt,
+      );
+
+      // Show the new key in a secure embed
+      const successEmbed = new EmbedBuilder()
+        .setTitle('✅ API Key Regenerated')
+        .setColor(0x00ff00)
+        .setDescription(
+          `Your API key has been successfully regenerated!\n\n` +
+            `**⚠️ IMPORTANT:** This is the **only time** you will see this key.\n` +
+            `Please copy and save it securely.\n\n` +
+            `**New API Key:**\n` +
+            `\`\`\`\n${newKey.fullKey}\n\`\`\`\n\n` +
+            `**Key Details:**\n` +
+            `• Name: ${newKey.keyPrefix}\n` +
+            `• Expires: ${newKey.expiresAt.toLocaleDateString()}\n` +
+            `• Backend URL: \`${this.rpcBackendUrl}\``,
+        )
+        .setFooter({ text: 'Keep this key secure and do not share it with anyone.' })
+        .setTimestamp();
+
+      await interaction.reply({
+        embeds: [successEmbed],
+        ephemeral: true,
+      } as any);
+
+      this.logger.log('API key regenerated', {
+        userId: discordUser.id,
+        discordId: interaction.user.id,
+        oldKeyId: keyId,
+        newKeyId: newKey.id,
+      });
+    } catch (error) {
+      this.logger.error(
+        'ConfirmRegenerationError',
+        'Failed to confirm key regeneration',
+        {},
+        error as Error,
+      );
+
+      await interaction.reply({
+        content: '❌ Sorry, something went wrong during key regeneration. Please try again later.',
+        ephemeral: true,
+      });
+    }
   }
 
   private getTierEmoji(tier: string): string {
