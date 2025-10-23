@@ -23,23 +23,23 @@ export class PurchaseService {
       throw new HttpException('Invalid tier', HttpStatus.BAD_REQUEST);
     }
 
-    // Calculate current price
     const usedRps = await this.pricingEngineService.getCurrentUtilization();
+    const onChainActivity = await this.pricingEngineService.getOnChainActivity();
+
     const basePrice = this.pricingEngineService.calculateDynamicPrice({
       usedRps,
       totalRps: this.pricingEngineService.getTotalRps(),
       priceMin: this.pricingEngineService.getPriceMin(),
       priceMax: this.pricingEngineService.getPriceMax(),
+      onChainActivity,
     });
 
     const totalPrice = Number((basePrice * tierInfo.rps * buyTierDto.duration).toFixed(4));
 
-    // Check if capacity is available
     if (usedRps + tierInfo.rps > this.pricingEngineService.getTotalRps()) {
       throw new HttpException('Insufficient capacity available', HttpStatus.CONFLICT);
     }
 
-    // Create purchase record
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + buyTierDto.duration);
 
@@ -54,7 +54,6 @@ export class PurchaseService {
 
     const savedPurchase = await this.purchaseRepository.save(purchase);
 
-    // Update utilization
     await this.pricingEngineService.updateUtilization(tierInfo.rps);
 
     return savedPurchase;

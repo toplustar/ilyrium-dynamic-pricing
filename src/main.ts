@@ -7,6 +7,7 @@ import * as compression from 'compression';
 
 import { AppModule } from './app.module';
 import { AppLogger } from './common/services/app-logger.service';
+import { SERVER_CONFIG } from './config/constants';
 
 async function bootstrap(): Promise<void> {
   const logger = new AppLogger('Bootstrap');
@@ -15,17 +16,14 @@ async function bootstrap(): Promise<void> {
     logger,
   });
 
-  // Security
   app.use(helmet());
   app.use(compression());
 
-  // CORS
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: SERVER_CONFIG.CORS_ORIGIN,
     credentials: true,
   });
 
-  // Global pipes
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,
@@ -34,10 +32,8 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  // API prefix
   app.setGlobalPrefix('api');
 
-  // Swagger documentation
   const config = new DocumentBuilder()
     .setTitle('RPC Proxy Backend')
     .setDescription('NestJS RPC Proxy Backend for Dynamic Pricing System')
@@ -48,8 +44,7 @@ async function bootstrap(): Promise<void> {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api-docs', app, document);
 
-  // Start server
-  const port = process.env.PORT || 3000;
+  const port = SERVER_CONFIG.PORT;
   await app.listen(port);
 
   const configService = app.get(ConfigService);

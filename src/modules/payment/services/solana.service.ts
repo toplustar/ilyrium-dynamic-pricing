@@ -78,7 +78,6 @@ export class SolanaService {
             transactions.push(transaction);
           }
 
-          // Add small delay to avoid rate limiting
           await this.sleep(100);
         } catch (error) {
           this.logger.warn(`Failed to parse transaction ${signatureInfo.signature}`, {
@@ -233,7 +232,6 @@ export class SolanaService {
     const postBalances = transaction.meta?.postBalances || [];
     const accountKeys = transaction.transaction.message.accountKeys;
 
-    // Find the payment wallet index
     const walletIndex = accountKeys.findIndex(
       key => key.pubkey.toBase58() === this.paymentWallet.toBase58(),
     );
@@ -250,7 +248,6 @@ export class SolanaService {
     const postBalance = postBalances[walletIndex] || 0;
     const difference = postBalance - preBalance;
 
-    // Convert lamports to SOL
     return difference > 0 ? difference / 1_000_000_000 : 0;
   }
 
@@ -330,7 +327,6 @@ export class SolanaService {
     try {
       const publicKey = new PublicKey(address);
 
-      // Get recent transactions to this address
       const signatures = await this.connection.getSignaturesForAddress(publicKey, { limit: 10 });
 
       const transactions: SolanaTransaction[] = [];
@@ -375,7 +371,6 @@ export class SolanaService {
       return null;
     }
 
-    // Extract amount received by target address
     const amount = this.useNativeSOL
       ? this.extractSOLAmountToAddress(transaction, targetAddress)
       : this.extractUsdcAmountToAddress(transaction, targetAddress);
@@ -395,7 +390,7 @@ export class SolanaService {
     return {
       signature: signatureInfo.signature,
       amount,
-      memo: '', // No memo needed!
+      memo: '',
       timestamp: new Date((signatureInfo.blockTime || 0) * 1000),
       confirmations,
       fromAddress,
@@ -411,7 +406,6 @@ export class SolanaService {
   ): number {
     const targetAddressStr = targetAddress.toBase58();
 
-    // Check post balances vs pre balances
     const accountKeys = transaction.transaction.message.accountKeys;
     const accountIndex = accountKeys.findIndex(key => key.pubkey.toBase58() === targetAddressStr);
 
@@ -423,7 +417,7 @@ export class SolanaService {
     const postBalance = transaction.meta?.postBalances[accountIndex] || 0;
     const difference = postBalance - preBalance;
 
-    return difference > 0 ? difference / 1e9 : 0; // Convert lamports to SOL
+    return difference > 0 ? difference / 1e9 : 0;
   }
 
   /**
@@ -433,7 +427,6 @@ export class SolanaService {
     _transaction: ParsedTransactionWithMeta,
     _targetAddress: PublicKey,
   ): number {
-    // For now, return 0 - implement USDC token parsing if needed
     return 0;
   }
 
@@ -445,23 +438,20 @@ export class SolanaService {
       const fromKeypair = Keypair.fromSecretKey(privateKey);
       const toPublicKey = new PublicKey(toAddress);
 
-      // Get balance
       const balance = await this.connection.getBalance(fromKeypair.publicKey);
 
-      // Calculate amount to send (leave some for fee)
-      const fee = 5000; // 0.000005 SOL
+      const fee = 5000;
       if (balance < fee) {
         this.logger.debug('Insufficient balance to sweep', {
           address: fromKeypair.publicKey.toBase58(),
           balance: balance / 1e9,
           fee: fee / 1e9,
         });
-        return null; // Not enough to sweep
+        return null;
       }
 
       const amount = balance - fee;
 
-      // Create and send transfer transaction
       const transaction = new Transaction().add(
         SystemProgram.transfer({
           fromPubkey: fromKeypair.publicKey,

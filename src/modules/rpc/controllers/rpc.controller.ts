@@ -80,7 +80,6 @@ export class RpcController {
     @Res() res: Response,
   ): Promise<void> {
     try {
-      // Validate JSON-RPC format
       if (!body.jsonrpc || body.jsonrpc !== '2.0') {
         throw new HttpException('Invalid JSON-RPC format', HttpStatus.BAD_REQUEST);
       }
@@ -89,7 +88,6 @@ export class RpcController {
         throw new HttpException('Method is required', HttpStatus.BAD_REQUEST);
       }
 
-      // Check if user is authenticated (from middleware)
       if (!req.user) {
         throw new HttpException('Authentication required', HttpStatus.UNAUTHORIZED);
       }
@@ -101,19 +99,16 @@ export class RpcController {
         requestId: body.id,
       });
 
-      // Forward request to Solana Vibe Station
       const response = await this.rpcService.forwardRpcRequest(
         body.method,
         body.params || [],
         body.id,
       );
 
-      // Set appropriate headers
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('X-RPC-Provider', 'Solana Vibe Station');
       res.setHeader('X-User-ID', req.user.userId);
 
-      // Send response
       res.status(200).json(response);
     } catch (error) {
       this.logger.error(
@@ -127,7 +122,6 @@ export class RpcController {
         error as Error,
       );
 
-      // Return JSON-RPC error response
       const errorResponse = {
         jsonrpc: '2.0',
         error: {

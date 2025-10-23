@@ -1,7 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsInt, Min, Max, MinLength, MaxLength } from 'class-validator';
 
-// Constants for validation - these should match the centralized config
 const WALLET_ADDRESS_MIN_LENGTH = 32;
 const WALLET_ADDRESS_MAX_LENGTH = 44;
 const MAX_DURATION_DAYS = 365;

@@ -59,14 +59,11 @@ export class ApiKeyService {
   ): Promise<CreateApiKeyResponse> {
     this.logger.log('Creating API key', { userId, name, customExpiryDate, metadata });
 
-    // Check user key limits
     await this.enforceUserKeyLimits(userId);
 
-    // Generate unique key with collision detection
     const keySecret = await this.generateUniqueKey();
-    const keyHash = await bcrypt.hash(keySecret, 12); // Increased salt rounds
+    const keyHash = await bcrypt.hash(keySecret, 12);
 
-    // Use custom expiry date if provided
     const expiresAt = customExpiryDate || this.getDefaultExpiryDate();
 
     const apiKey = this.apiKeyRepository.create({
@@ -110,7 +107,6 @@ export class ApiKeyService {
     while (attempts < this.maxGenerationAttempts) {
       const keySecret = crypto.randomBytes(16).toString('hex');
 
-      // Check for collision using prefix
       const existing = await this.apiKeyRepository.findOne({
         where: { keyPrefix: keySecret.substring(0, 7) },
       });
@@ -140,7 +136,6 @@ export class ApiKeyService {
       where: { userId, isActive: true },
     });
 
-    // Allow up to maxKeysPerUser active API keys (for multiple subscriptions)
     if (userKeyCount >= this.maxKeysPerUser) {
       throw new HttpException(
         `Maximum API key limit reached (${this.maxKeysPerUser}). Please revoke unused keys or wait for current subscriptions to expire.`,
@@ -169,7 +164,6 @@ export class ApiKeyService {
       timestamp?: Date;
     },
   ): Promise<ApiKey | null> {
-    // Enhanced format validation
     if (!this.isValidKeyFormat(fullKey)) {
       this.logSecurityEvent('invalid_format', { fullKey: fullKey.substring(0, 8) + '...' });
       return null;
@@ -184,18 +178,15 @@ export class ApiKeyService {
       const isMatch = await bcrypt.compare(fullKey, apiKey.keyHash);
 
       if (isMatch) {
-        // Check expiry
         if (apiKey.expiresAt < new Date()) {
           this.logSecurityEvent('expired_key', { keyId: apiKey.id });
           return null;
         }
 
-        // Update last used timestamp
         await this.apiKeyRepository.update(apiKey.id, {
           lastUsedAt: new Date(),
         });
 
-        // Log successful validation
         this.logger.debug('API key validated successfully', {
           keyId: apiKey.id,
           userId: apiKey.userId,
@@ -311,12 +302,12 @@ export class ApiKeyService {
     const apiKeys = await this.apiKeyRepository.find({
       where: { userId },
       order: { createdAt: 'DESC' },
-      take: 10, // Limit to last 10
+      take: 10,
     });
 
     return apiKeys.map(key => ({
       id: key.id,
-      keyPrefix: key.keyPrefix, // Only first 7 characters available
+      keyPrefix: key.keyPrefix,
       name: key.name,
       expiresAt: key.expiresAt,
       isActive: key.isActive,
@@ -332,13 +323,13 @@ export class ApiKeyService {
   async getAllApiKeys(): Promise<any[]> {
     const apiKeys = await this.apiKeyRepository.find({
       order: { createdAt: 'DESC' },
-      take: 10, // Limit to last 10
+      take: 10,
     });
 
     return apiKeys.map(key => ({
       id: key.id,
       userId: key.userId,
-      keyPrefix: key.keyPrefix, // Only first 7 characters available
+      keyPrefix: key.keyPrefix,
       name: key.name,
       expiresAt: key.expiresAt,
       isActive: key.isActive,
@@ -351,7 +342,6 @@ export class ApiKeyService {
    * Regenerate API key for a user (when original was lost)
    */
   async regenerateApiKey(userId: string, oldKeyId?: string): Promise<CreateApiKeyResponse> {
-    // Deactivate old key if provided
     if (oldKeyId) {
       await this.apiKeyRepository.update(oldKeyId, {
         isActive: false,
@@ -360,7 +350,6 @@ export class ApiKeyService {
       this.logger.log('Deactivated old API key', { oldKeyId, userId });
     }
 
-    // Create new API key with same settings as before
     const newKey = await this.createApiKey(userId, 'Regenerated API Key');
 
     this.logger.log('Regenerated API key', {

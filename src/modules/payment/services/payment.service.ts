@@ -34,7 +34,7 @@ export interface PaymentAttemptResponse {
 export class PaymentService {
   private readonly logger: AppLogger;
   private readonly paymentExpiryMinutes: number;
-  private readonly sweepingPayments = new Set<string>(); // Track payments being swept
+  private readonly sweepingPayments = new Set<string>();
   private notificationService?: {
     notifyPaymentReceived: (userId: string, amount: number, remaining: number) => Promise<void>;
     notifyPurchaseComplete: (
@@ -43,7 +43,6 @@ export class PaymentService {
       rps: number,
       expiresAt: Date,
     ) => Promise<void>;
-    // 🆕 NEW: Automatically send API key when payment completes
     notifyApiKeyGenerated: (
       userId: string,
       paymentAddress: string,
@@ -72,7 +71,6 @@ export class PaymentService {
     logger: AppLogger,
   ) {
     this.logger = logger.forClass('PaymentService');
-    // Payment link expires in 60 minutes (1 hour) by default
     this.paymentExpiryMinutes = this.configService.get<number>('payment.expiryMinutes', 60);
     void this.sweepSinglePayment;
   }
@@ -85,7 +83,6 @@ export class PaymentService {
       rps: number,
       expiresAt: Date,
     ) => Promise<void>;
-    // 🆕 NEW: Automatically send API key when payment completes
     notifyApiKeyGenerated: (
       userId: string,
       paymentAddress: string,
@@ -116,11 +113,14 @@ export class PaymentService {
     }
 
     const usedRps = await this.pricingEngineService.getCurrentUtilization();
+    const onChainActivity = await this.pricingEngineService.getOnChainActivity();
+
     const basePrice = this.pricingEngineService.calculateDynamicPrice({
       usedRps,
       totalRps: this.pricingEngineService.getTotalRps(),
       priceMin: this.pricingEngineService.getPriceMin(),
       priceMax: this.pricingEngineService.getPriceMax(),
+      onChainActivity,
     });
 
     const totalPrice = Number((basePrice * tierInfo.rps * dto.duration).toFixed(6));
@@ -129,13 +129,10 @@ export class PaymentService {
       throw new HttpException('Insufficient capacity available', HttpStatus.CONFLICT);
     }
 
-    // Generate unique payment address
     const { publicKey, privateKey } = this.solanaService.generatePaymentAddress();
 
-    // Encrypt the private key before storing
     const encryptedPrivateKey = CryptoUtil.encryptPrivateKey(privateKey);
 
-    // Set payment expiration to 1 hour from now
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + this.paymentExpiryMinutes);
 
@@ -162,10 +159,10 @@ export class PaymentService {
 
     return {
       id: saved.id,
-      memo: '', // No memo needed
+      memo: '',
       amountExpected: saved.amountExpected,
       amountPaid: saved.amountPaid,
-      walletAddress: publicKey, // Return unique address
+      walletAddress: publicKey,
       expiresAt: saved.expiresAt,
       status: saved.status,
     };
@@ -283,7 +280,7 @@ export class PaymentService {
   async getAllPaymentAttempts(): Promise<PaymentAttempt[]> {
     return await this.paymentAttemptRepository.find({
       order: { createdAt: 'DESC' },
-      take: 20, // Limit to last 20 for debugging
+      take: 20,
     });
   }
 
@@ -313,10 +310,8 @@ export class PaymentService {
       return null;
     }
 
-    // Find API key created for this user around the time of payment completion
     const apiKeys = await this.apiKeyService.getApiKeysForUser(payment.userId);
 
-    // Return the most recent API key (should be the one for this payment)
     return apiKeys.length > 0 ? apiKeys[0] : null;
   }
 
@@ -389,7 +384,6 @@ export class PaymentService {
 
     await this.purchaseRepository.save(purchase);
 
-    // Generate API key automatically when purchase is completed
     let generatedApiKey: any = null;
     try {
       generatedApiKey = await this.apiKeyService.createApiKey(
@@ -416,13 +410,11 @@ export class PaymentService {
 
     await this.pricingEngineService.updateUtilization(tierInfo.rps);
 
-    // 🚀 AUTO-SEND API KEY TO USER WHEN PAYMENT COMPLETES
     if (this.notificationService && generatedApiKey) {
-      // Send API key automatically to user
       await this.notificationService.notifyApiKeyGenerated(
         paymentAttempt.userId,
         paymentAttempt.paymentAddress || 'unknown',
-        generatedApiKey.fullKey, // 🔑 FULL API KEY SENT AUTOMATICALLY!
+        generatedApiKey.fullKey,
         {
           tier: paymentAttempt.tier,
           duration: paymentAttempt.duration,
@@ -433,7 +425,6 @@ export class PaymentService {
         },
       );
 
-      // Also send basic completion notification
       await this.notificationService.notifyPurchaseComplete(
         paymentAttempt.userId,
         paymentAttempt.tier,
@@ -456,7 +447,6 @@ export class PaymentService {
       expiresAt,
     });
 
-    // Immediately sweep funds to main wallet
     await this.sweepSinglePayment(paymentAttempt);
   }
 
@@ -494,7 +484,6 @@ export class PaymentService {
     let failCount = 0;
 
     for (const payment of paymentsToSweep) {
-      // Skip if already being swept
       if (this.sweepingPayments.has(payment.id)) {
         this.logger.debug('Payment already being swept, skipping', {
           paymentId: payment.id,
@@ -549,7 +538,6 @@ export class PaymentService {
   }
 
   async sweepSinglePayment(payment: PaymentAttempt): Promise<void> {
-    // Check if payment is already being swept
     if (this.sweepingPayments.has(payment.id)) {
       this.logger.debug('Payment already being swept, skipping', {
         paymentId: payment.id,
@@ -557,7 +545,6 @@ export class PaymentService {
       return;
     }
 
-    // Check if payment has a private key (unique address system)
     if (!payment.paymentPrivateKey || !payment.paymentAddress) {
       this.logger.debug('Payment has no private key, skipping immediate sweep', {
         paymentId: payment.id,
@@ -580,18 +567,15 @@ export class PaymentService {
         to: mainWallet,
       });
 
-      // Decrypt the private key
       const { paymentPrivateKey } = payment;
       if (!paymentPrivateKey) {
         return;
       }
       const privateKey = CryptoUtil.decryptPrivateKey(paymentPrivateKey);
 
-      // Sweep funds to main wallet
       const signature = await this.solanaService.sweepFunds(privateKey, mainWallet);
 
       if (signature) {
-        // Clear the private key after successful sweep (security)
         payment.paymentPrivateKey = undefined;
         await this.paymentAttemptRepository.save(payment);
 
@@ -614,7 +598,6 @@ export class PaymentService {
         { paymentId: payment.id },
         error as Error,
       );
-      // Don't throw - let the hourly cron retry if this fails
     } finally {
       this.sweepingPayments.delete(payment.id);
     }
@@ -634,8 +617,6 @@ export class PaymentService {
       throw new HttpException('Payment attempt not found', HttpStatus.NOT_FOUND);
     }
 
-    // For now, we'll use a simple approach - update the updatedAt timestamp
-    // In the future, you could add a specific 'sweptAt' column
     paymentAttempt.updatedAt = new Date();
     await this.paymentAttemptRepository.save(paymentAttempt);
 

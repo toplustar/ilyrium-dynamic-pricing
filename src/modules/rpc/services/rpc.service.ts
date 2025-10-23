@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import axios, { AxiosResponse } from 'axios';
 
 import { AppLogger } from '~/common/services/app-logger.service';
+import { RPC_CONFIG } from '~/config/constants';
 
 @Injectable()
 export class RpcService {
@@ -15,8 +16,7 @@ export class RpcService {
     logger: AppLogger,
   ) {
     this.logger = logger.forClass('RpcService');
-    this.rpcEndpoint =
-      this.configService.get<string>('rpc.endpoint') || 'https://api.mainnet-beta.solana.com';
+    this.rpcEndpoint = RPC_CONFIG.ENDPOINT;
     this.apiKey = this.configService.get<string>('rpc.apiKey') || '';
 
     this.logger.log('RPC service initialized', {
@@ -54,7 +54,7 @@ export class RpcService {
           'Content-Type': 'application/json',
           ...(this.apiKey && { Authorization: this.apiKey }),
         },
-        timeout: 30000, // 30 second timeout
+        timeout: 30000,
       });
 
       const duration = Date.now() - startTime;
@@ -77,11 +77,10 @@ export class RpcService {
         error as Error,
       );
 
-      // Return proper JSON-RPC error response
       return {
         jsonrpc: '2.0',
         error: {
-          code: -32603, // Internal error
+          code: -32603,
           message: 'RPC request failed',
           data: error.message,
         },

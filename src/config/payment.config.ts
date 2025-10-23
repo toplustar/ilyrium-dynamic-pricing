@@ -1,6 +1,7 @@
 import { registerAs } from '@nestjs/config';
+import { PAYMENT_CONFIG } from './constants';
 
 export default registerAs('payment', () => ({
-  pollInterval: parseInt(process.env.PAYMENT_POLL_INTERVAL || '10000', 10),
-  expiryMinutes: parseInt(process.env.PAYMENT_EXPIRY_MINUTES || '60', 10), // Payment link expires in 60 minutes (1 hour)
+  pollInterval: PAYMENT_CONFIG.POLL_INTERVAL,
+  expiryMinutes: PAYMENT_CONFIG.EXPIRY_MINUTES,
 }));

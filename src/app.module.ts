@@ -79,7 +79,6 @@ import { ApiKeyMiddleware } from './modules/api-key/middleware/api-key.middlewar
         db: redisConfig.database,
         ttl: redisConfig.ttl,
         keyPrefix: redisConfig.keyPrefix,
-        // Enable TLS for Upstash Redis
         tls: redisConfig.host?.includes('upstash.io') ? {} : undefined,
       }),
       inject: [RedisConfig.KEY],
@@ -108,7 +107,6 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer.apply(RequestLoggerMiddleware).forRoutes({ path: '*', method: RequestMethod.ALL });
 
-    // Apply API key middleware to RPC routes
     consumer.apply(ApiKeyMiddleware).forRoutes({ path: 'api/rpc*', method: RequestMethod.POST });
   }
 }

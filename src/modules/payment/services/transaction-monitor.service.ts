@@ -21,7 +21,6 @@ export class TransactionMonitorService implements OnModuleInit {
     logger: AppLogger,
   ) {
     this.logger = logger.forClass('TransactionMonitorService');
-    // Faster monitoring: 5 seconds instead of 10 to beat external sweep
     this.pollInterval = this.configService.get<number>('payment.pollInterval', 5000);
   }
 
@@ -84,14 +83,12 @@ export class TransactionMonitorService implements OnModuleInit {
     for (const payment of pendingPayments) {
       try {
         if (payment.paymentAddress) {
-          // New system: Check unique address
           await this.checkPaymentByAddress(
             payment.id,
             payment.paymentAddress,
             payment.amountExpected,
           );
         } else if (payment.memo) {
-          // Old system: Check memo (backward compatibility)
           await this.checkPaymentAttempt(payment.id, payment.memo);
         }
       } catch (error) {
@@ -117,10 +114,9 @@ export class TransactionMonitorService implements OnModuleInit {
   ): Promise<void> {
     this.logger.debug(`Checking payment address ${paymentAddress}`);
 
-    // Query transactions to this specific address
     const transactions = await this.solanaService.queryTransactionsByAddress(
       paymentAddress,
-      expectedAmount * 0.99, // Allow 1% tolerance
+      expectedAmount * 0.99,
     );
 
     if (transactions.length === 0) {
@@ -134,7 +130,6 @@ export class TransactionMonitorService implements OnModuleInit {
 
     for (const transaction of transactions) {
       try {
-        // Record transaction immediately to beat external sweep
         await this.paymentService.recordTransaction(
           paymentAttemptId,
           transaction.signature,
@@ -149,7 +144,6 @@ export class TransactionMonitorService implements OnModuleInit {
           amount: transaction.amount,
         });
 
-        // Check if this transaction completed the payment
         const payment = await this.paymentService.getPaymentAttemptById(paymentAttemptId);
         if (payment && payment.status === PaymentStatus.COMPLETED) {
           paymentCompleted = true;
@@ -158,7 +152,7 @@ export class TransactionMonitorService implements OnModuleInit {
             totalPaid: payment.amountPaid,
             expectedAmount: payment.amountExpected,
           });
-          break; // No need to process more transactions
+          break;
         }
       } catch (error) {
         this.logger.error(
@@ -170,7 +164,6 @@ export class TransactionMonitorService implements OnModuleInit {
       }
     }
 
-    // If payment completed, trigger immediate sweep of funds to main wallet
     if (paymentCompleted) {
       try {
         await this.triggerImmediateSweep(paymentAddress, paymentAttemptId);
@@ -239,14 +232,12 @@ export class TransactionMonitorService implements OnModuleInit {
     });
 
     try {
-      // First, let's get the payment details
       const payment = await this.paymentService.getPaymentAttemptById(paymentAttemptId);
       if (!payment) {
         this.logger.warn('Payment not found for sweep', { paymentAttemptId });
         return;
       }
 
-      // Perform the actual sweep
       await this.paymentService.sweepSinglePayment(payment);
 
       this.logger.log('✅ Immediate sweep completed', {

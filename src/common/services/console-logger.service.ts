@@ -48,16 +48,11 @@ export class ConsoleLogger {
 
   redisQuery(query: string, duration: number, result?: string): void {
     if (!EnvironmentUtil.isLocal) return;
-    // Parse the query to extract command, key, and data
     const parts = query.split(' ');
-    const command = parts[0]; // SET, GET, DEL
-    const key = parts[1]; // Redis key
-    const data = parts.slice(2).join(' '); // Value data (for SET operations)
+    const command = parts[0];
+    const key = parts[1];
+    const data = parts.slice(2).join(' ');
 
-    // Red color (\x1b[31m) for redis: (like Redis logo)
-    // Blue color (\x1b[34m) for commands
-    // White color (\x1b[37m) for keys
-    // Brown color (\x1b[2m\x1b[37m) for data, duration, result
     let coloredQuery = `\x1b[31mredis:\x1b[0m \x1b[34m${command}\x1b[0m \x1b[37m${key}\x1b[0m`;
     if (data) {
       coloredQuery += ` \x1b[2m\x1b[37m${data}\x1b[0m`;
@@ -78,10 +73,6 @@ export class ConsoleLogger {
   ): void {
     if (!EnvironmentUtil.isLocal) return;
 
-    // Cyan color (\x1b[36m) for http: (greenish-blue)
-    // Blue color (\x1b[34m) for methods
-    // White color (\x1b[37m) for URLs
-    // Brown color (\x1b[2m\x1b[37m) for duration, status, data
     let coloredRequest = `\x1b[36mhttp:\x1b[0m \x1b[34m${method}\x1b[0m \x1b[37m${url}\x1b[0m`;
 
     if (error) {
@@ -113,7 +104,6 @@ export class ConsoleLogger {
   }
 
   private formatMessage(level: string, message: any, context: string): string {
-    // Format timestamp exactly like NestJS: MM/DD/YYYY, HH:MM:SS AM/PM with leading zeros
     const now = new Date();
     const timestamp = now.toLocaleString('en-US', {
       month: '2-digit',
@@ -126,7 +116,6 @@ export class ConsoleLogger {
     });
     const pid = process.pid;
 
-    // Format exactly like NestJS: [Nest] PID  - TIMESTAMP     LEVEL [CONTEXT] MESSAGE
     return `\x1b[32m[Nest] ${pid}  - \x1b[37m${timestamp}\x1b[32m     ${level.toUpperCase()} \x1b[33m[${context}]\x1b[32m ${message}\x1b[0m`;
   }
 }

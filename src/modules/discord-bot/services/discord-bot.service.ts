@@ -164,7 +164,6 @@ export class DiscordBotService implements OnModuleInit {
   private async handleButtonInteraction(interaction: any): Promise<void> {
     const { customId } = interaction;
 
-    // Store interaction context for ephemeral messages
     if (interaction.user) {
       const user = await this.purchaseService['discordUserService'].getUserByDiscordId(
         interaction.user.id,
@@ -222,7 +221,6 @@ export class DiscordBotService implements OnModuleInit {
         return;
       }
 
-      // Find purchase channel by name pattern
       const channels = this.client.channels.cache.filter(channel => {
         if (!channel.isTextBased()) return false;
         const name = (channel as any).name?.toLowerCase() || '';
@@ -231,7 +229,6 @@ export class DiscordBotService implements OnModuleInit {
 
       const targetChannel = channels.first();
       if (targetChannel?.isTextBased()) {
-        // Add user mention if provided
         if (targetUserId) {
           const content = messageOptions.content || '';
           messageOptions.content = `<@${targetUserId}> ${content}`.trim();

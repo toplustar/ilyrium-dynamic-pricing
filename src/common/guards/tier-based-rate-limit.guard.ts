@@ -32,43 +32,36 @@ export class TierBasedRateLimitGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
 
-    // First, try to get userId from middleware (if middleware has run)
     let userId = request.user?.userId;
 
-    // If not available, authenticate the API key directly
     if (!userId) {
       userId = await this.authenticateApiKey(request);
     }
 
     try {
-      // Get user's active purchase with highest RPS allocation
       const activePurchase = await this.purchaseRepository.findOne({
         where: {
           userId,
           isActive: true,
-          expiresAt: MoreThan(new Date()), // Not expired
+          expiresAt: MoreThan(new Date()),
         },
-        order: { rpsAllocated: 'DESC' }, // Get highest tier
+        order: { rpsAllocated: 'DESC' },
       });
 
       if (!activePurchase) {
         throw new HttpException('No active subscription found', HttpStatus.FORBIDDEN);
       }
 
-      // Check if subscription is expired
       if (activePurchase.expiresAt < new Date()) {
         throw new HttpException('Subscription expired', HttpStatus.FORBIDDEN);
       }
 
-      // Get user's RPS limit from their tier
       const rpsLimit = activePurchase.rpsAllocated;
-      const timeWindow = 1; // 1 second window for RPS
+      const timeWindow = 1;
       const cacheKey = `rate-limit:user:${userId}:tier:${activePurchase.tier}`;
 
-      // Get current request count
       const currentCount = (await this.cacheManager.get<number>(cacheKey)) ?? 0;
 
-      // Check if user has exceeded their tier limit
       if (currentCount >= rpsLimit) {
         this.logger.warn('Rate limit exceeded for user', {
           userId,
@@ -83,10 +76,8 @@ export class TierBasedRateLimitGuard implements CanActivate {
         );
       }
 
-      // Increment counter with TTL
       await this.cacheManager.set(cacheKey, currentCount + 1, timeWindow * 1000);
 
-      // Log successful request
       this.logger.debug('Rate limit check passed', {
         userId,
         tier: activePurchase.tier,
@@ -120,12 +111,10 @@ export class TierBasedRateLimitGuard implements CanActivate {
       throw new HttpException('Header x-api-key required', HttpStatus.UNAUTHORIZED);
     }
 
-    // Validate API key format
     if (!this.isValidKeyFormat(apiKey)) {
       throw new HttpException('Invalid API key format', HttpStatus.UNAUTHORIZED);
     }
 
-    // Find and validate API key
     const keyPrefix = apiKey.substring(0, 7);
     const apiKeys = await this.apiKeyRepository.find({
       where: { keyPrefix, isActive: true },
@@ -136,7 +125,6 @@ export class TierBasedRateLimitGuard implements CanActivate {
       const isMatch = await bcrypt.compare(apiKey, key.keyHash);
 
       if (isMatch) {
-        // Check expiry
         if (key.expiresAt < new Date()) {
           throw new HttpException('API key expired', HttpStatus.UNAUTHORIZED);
         }
@@ -150,7 +138,6 @@ export class TierBasedRateLimitGuard implements CanActivate {
       throw new HttpException('Invalid API key', HttpStatus.UNAUTHORIZED);
     }
 
-    // Set user info on request for consistency
     request.user = {
       userId: validApiKey.userId,
       apiKeyId: validApiKey.id,

@@ -77,7 +77,6 @@ export class PurchaseService {
   }
 
   async createPayment(interaction: ButtonInteraction): Promise<void> {
-    // Show "Creating payment link..." message
     await interaction.reply({
       content: 'Creating payment link...',
       ephemeral: true,
@@ -99,7 +98,6 @@ export class PurchaseService {
       discriminator,
     );
 
-    // Store user interaction context for ephemeral messages
     this.discordNotificationService.storeUserInteraction(user.id, discordId, interaction);
 
     const payment = await this.paymentService.createPaymentAttempt({
@@ -108,7 +106,6 @@ export class PurchaseService {
       duration,
     });
 
-    // Format payment details as plain text
     const paymentMessage = `To complete your purchase for **${duration} day(s)**, please send the **EXACT** amount in SOL to the below address.
 
 **Amount**
@@ -176,7 +173,6 @@ ${payment.amountExpected} SOL
       .setTimestamp();
 
     if (String(payment.status) === 'COMPLETED') {
-      // Calculate expiry date based on purchase duration
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + payment.duration);
       const expiryTimestamp = Math.floor(expiresAt.getTime() / 1000);
@@ -290,7 +286,6 @@ ${payment.amountExpected} SOL
       .setTimestamp()
       .setFooter({ text: `User: ${user.username || 'Unknown'}` });
 
-    // Add active purchases
     if (purchases.length > 0) {
       for (const purchase of purchases) {
         const expiryTimestamp = Math.floor(purchase.expiresAt.getTime() / 1000);
@@ -302,7 +297,6 @@ ${payment.amountExpected} SOL
       }
     }
 
-    // Add active API keys
     if (activeApiKeys.length > 0) {
       const apiKeysText = this.formatApiKeysText(activeApiKeys);
       embed.addFields({
@@ -312,14 +306,12 @@ ${payment.amountExpected} SOL
       });
     }
 
-    // Add backend URL information
     embed.addFields({
       name: '🌐 Backend URL',
       value: `\`${this.rpcBackendUrl}\``,
       inline: false,
     });
 
-    // Create buttons for showing full API keys
     const components = this.createApiKeyButtons(activeApiKeys);
 
     return { embed, components };
@@ -332,7 +324,6 @@ ${payment.amountExpected} SOL
       return components;
     }
 
-    // Create buttons for each API key (max 5 per row, Discord limit)
     for (let i = 0; i < activeApiKeys.length; i += 5) {
       const row = new ActionRowBuilder<ButtonBuilder>();
       const keysInRow = activeApiKeys.slice(i, i + 5);
@@ -386,7 +377,6 @@ ${payment.amountExpected} SOL
         return;
       }
 
-      // Get the existing API key
       const existingKey = await this.apiKeyService.getUserApiKeys(discordUser.id);
       const targetKey = existingKey.find(key => key.id === keyId);
 
@@ -398,7 +388,6 @@ ${payment.amountExpected} SOL
         return;
       }
 
-      // Create confirmation embed
       const confirmEmbed = new EmbedBuilder()
         .setTitle('⚠️ Regenerate API Key')
         .setColor(0xff9900)
@@ -460,7 +449,6 @@ ${payment.amountExpected} SOL
         return;
       }
 
-      // Get the existing API key to preserve metadata
       const existingKeys = await this.apiKeyService.getUserApiKeys(discordUser.id);
       const targetKey = existingKeys.find(key => key.id === keyId);
 
@@ -472,19 +460,16 @@ ${payment.amountExpected} SOL
         return;
       }
 
-      // Deactivate the old key
       if (keyId) {
         await this.apiKeyService.revokeApiKey(keyId);
       }
 
-      // Create a new API key with the same metadata
       const newKey = await this.apiKeyService.createApiKey(
         discordUser.id,
         targetKey.name || undefined,
         targetKey.expiresAt,
       );
 
-      // Show the new key in a secure embed
       const successEmbed = new EmbedBuilder()
         .setTitle('✅ API Key Regenerated')
         .setColor(0x00ff00)

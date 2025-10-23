@@ -7,11 +7,10 @@ import { PaymentService } from '~/modules/payment/services/payment.service';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordUserService } from './discord-user.service';
 
-// Store user interaction contexts for ephemeral messages
 interface UserInteractionContext {
   userId: string;
   discordId: string;
-  lastInteraction: any; // Discord interaction object
+  lastInteraction: any;
   timestamp: Date;
 }
 
@@ -32,7 +31,6 @@ export class DiscordNotificationService implements OnModuleInit {
   }
 
   onModuleInit(): void {
-    // Register this service with PaymentService for automatic notifications
     this.paymentService.setNotificationService(this);
   }
 
@@ -55,7 +53,6 @@ export class DiscordNotificationService implements OnModuleInit {
     const context = this.userInteractionContexts.get(userId);
     if (!context) return null;
 
-    // Check if context is still valid (within last 5 minutes)
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     if (context.timestamp < fiveMinutesAgo) {
       this.userInteractionContexts.delete(userId);
@@ -91,7 +88,6 @@ export class DiscordNotificationService implements OnModuleInit {
         embed.setDescription('🎉 **Payment Complete!** Processing your purchase...');
       }
 
-      // Try to send via ephemeral message first, fallback to DM
       const context = this.getUserInteractionContext(userId);
       if (context?.lastInteraction) {
         try {
@@ -114,7 +110,6 @@ export class DiscordNotificationService implements OnModuleInit {
         }
       }
 
-      // Fallback to DM
       await this.discordBotService.sendDirectMessage(user.discordId, { embeds: [embed] });
 
       this.logger.log('Payment received notification sent via DM', {
@@ -161,7 +156,6 @@ export class DiscordNotificationService implements OnModuleInit {
         .setFooter({ text: 'Your API key will be sent here shortly! 🔑' })
         .setTimestamp();
 
-      // Try to send via ephemeral message first, fallback to DM
       const context = this.getUserInteractionContext(userId);
       if (context?.lastInteraction) {
         try {
@@ -184,7 +178,6 @@ export class DiscordNotificationService implements OnModuleInit {
         }
       }
 
-      // Fallback to DM
       await this.discordBotService.sendDirectMessage(user.discordId, { embeds: [embed] });
 
       this.logger.log('Purchase completion notification sent via DM', {
@@ -202,7 +195,6 @@ export class DiscordNotificationService implements OnModuleInit {
     }
   }
 
-  // 🚀 NEW METHOD: Auto-send API key when payment completes!
   async notifyApiKeyGenerated(
     userId: string,
     paymentAddress: string,
@@ -255,7 +247,6 @@ export class DiscordNotificationService implements OnModuleInit {
         })
         .setTimestamp();
 
-      // Try to send via ephemeral message first, fallback to DM
       const context = this.getUserInteractionContext(userId);
       if (context?.lastInteraction) {
         try {
@@ -280,7 +271,6 @@ export class DiscordNotificationService implements OnModuleInit {
         }
       }
 
-      // Fallback to DM
       await this.discordBotService.sendDirectMessage(user.discordId, { embeds: [embed] });
 
       this.logger.log('🎉 API key sent automatically via DM!', {

@@ -238,14 +238,13 @@ export class AppController {
         apiKey: null,
       };
 
-      // Get API key if payment is completed
       if (payment.status === PaymentStatus.COMPLETED) {
         try {
           const apiKey = await this.paymentService.getApiKeyForPayment(payment.id);
           if (apiKey) {
             paymentData.apiKey = {
               id: apiKey.id,
-              fullKey: apiKey.fullKey, // Show full API key for debugging
+              fullKey: apiKey.fullKey,
               expiresAt: apiKey.expiresAt,
               isActive: apiKey.isActive,
             };
@@ -268,7 +267,6 @@ export class AppController {
     description: 'Check if a specific transaction signature is being processed',
   })
   debugTransaction(@Param('signature') signature: string): any {
-    // This would need to be implemented in PaymentService
     return {
       signature,
       message: 'Transaction debugging endpoint - check logs for processing status',
@@ -292,9 +290,7 @@ export class AppController {
         return { success: true, message: 'Payment already completed', payment };
       }
 
-      // Force check the payment address
       if (payment.paymentAddress) {
-        // This would trigger the monitoring logic manually
         return {
           success: true,
           message: 'Manual processing triggered',
@@ -335,7 +331,6 @@ export class AppController {
         return { success: false, message: 'Invalid amount' };
       }
 
-      // Force record the transaction with correct amount
       const signature =
         '4NgJ5T86qLf9yZpbc6vQAwtKosAkF6tqzhPkWVWgfth2C1BMC461mSBDYxKrsmsoBpUMrVN5wP3R1iQRq8rhJNob';
 
@@ -369,7 +364,6 @@ export class AppController {
   async getMyApiKeys(@Param('userId') userId?: string): Promise<any> {
     try {
       if (userId) {
-        // Get API keys for specific user
         const apiKeys = await this.paymentService.getApiKeysForUser(userId);
         return {
           success: true,
@@ -378,7 +372,6 @@ export class AppController {
           apiKeys,
         };
       } else {
-        // Get all recent API keys (for debugging)
         const allApiKeys = await this.paymentService.getAllApiKeys();
         return {
           success: true,
@@ -427,12 +420,11 @@ export class AppController {
         message: null,
       };
 
-      // If payment is completed, check for API key
       if (payment.status === PaymentStatus.COMPLETED) {
         try {
           const apiKeys = await this.paymentService.getApiKeysForUser(payment.userId);
           if (apiKeys.length > 0) {
-            const latestKey = apiKeys[0]; // Most recent key
+            const latestKey = apiKeys[0];
             result.apiKey = {
               keyPrefix: latestKey.keyPrefix,
               expiresAt: latestKey.expiresAt,
@@ -478,7 +470,6 @@ export class AppController {
   })
   async regenerateApiKey(@Param('paymentAddress') paymentAddress: string): Promise<any> {
     try {
-      // Find the completed payment
       const payment = await this.paymentService.getPaymentAttemptByAddress(paymentAddress);
 
       if (!payment) {
@@ -495,11 +486,9 @@ export class AppController {
         };
       }
 
-      // Get existing API keys for this user to deactivate them
       const existingKeys = await this.paymentService.getApiKeysForUser(payment.userId);
       const oldKeyId = existingKeys.length > 0 ? existingKeys[0].id : undefined;
 
-      // Generate new API key
       const newApiKey = await this.paymentService.regenerateApiKey(payment.userId, oldKeyId);
 
       return {
@@ -514,7 +503,7 @@ export class AppController {
           completedAt: payment.updatedAt,
         },
         apiKey: {
-          key: newApiKey.fullKey, // Full key is available at creation time
+          key: newApiKey.fullKey,
           expiresAt: newApiKey.expiresAt,
           tier: payment.tier,
           duration: payment.duration,
