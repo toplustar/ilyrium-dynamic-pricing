@@ -16,7 +16,6 @@ export class UsageService {
   ) {}
 
   async getUsage(walletAddress: string): Promise<GetUsageResponseDto> {
-    // Get active purchases
     const activePurchases = await this.purchaseRepository.find({
       where: {
         walletAddress: walletAddress,
@@ -28,7 +27,6 @@ export class UsageService {
       },
     });
 
-    // Get usage metrics for the last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -94,7 +92,7 @@ export class UsageService {
       dateFilter = { createdAt: MoreThanOrEqual(startDate) };
     }
 
-    const walletAddresses = ['telegram-user'];
+    const walletAddresses = ['discord-user'];
 
     const usageMetrics = await this.usageMetricsRepository.find({
       where: {

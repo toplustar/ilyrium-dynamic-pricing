@@ -22,7 +22,7 @@ export class PaymentSweepService implements OnModuleInit {
   }
 
   onModuleInit(): void {
-    this.logger.log('Payment sweep service initialized - sweeping every hour');
+    this.logger.log('✅ Payment sweep service initialized - Auto-sweep enabled');
   }
 
   /**
@@ -36,9 +36,11 @@ export class PaymentSweepService implements OnModuleInit {
     }
 
     this.isSweeping = true;
+    this.logger.log('🔄 Starting auto-sweep of completed payments...');
 
     try {
       await this.paymentService.sweepCompletedPayments();
+      this.logger.log('✅ Auto-sweep completed successfully');
     } catch (error) {
       this.logger.error('AutoSweepError', 'Failed to auto-sweep payments', {}, error as Error);
     } finally {

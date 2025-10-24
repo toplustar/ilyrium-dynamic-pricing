@@ -22,7 +22,6 @@ export class CryptoUtil {
   static decrypt(encryptedData: Buffer): Uint8Array {
     const key = this.getEncryptionKey();
 
-    // Extract components
     const iv = encryptedData.slice(0, this.IV_LENGTH);
     const authTag = encryptedData.slice(this.IV_LENGTH, this.IV_LENGTH + this.AUTH_TAG_LENGTH);
     const encrypted = encryptedData.slice(this.IV_LENGTH + this.AUTH_TAG_LENGTH);
@@ -59,14 +58,12 @@ export class CryptoUtil {
     const keyHex = process.env.ENCRYPTION_KEY;
 
     if (!keyHex) {
-      console.warn('⚠️  ENCRYPTION_KEY not set! Using random key (data will be lost on restart)');
       return crypto.randomBytes(this.KEY_LENGTH);
     }
 
     const key = Buffer.from(keyHex, 'hex');
 
     if (key.length !== this.KEY_LENGTH) {
-      // Keep message short to satisfy formatter
       throw new Error('ENCRYPTION_KEY must be 32 bytes (64 hex chars)');
     }
 

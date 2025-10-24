@@ -1,16 +1,17 @@
 import { registerAs } from '@nestjs/config';
+import { SERVER_CONFIG, RPC_CONFIG, PRICING_CONFIG, JWT_CONFIG } from './constants';
 
 export const AppConfig = registerAs('app', () => ({
-  port: parseInt(process.env.PORT as string, 10) || 3000,
-  environment: process.env.NODE_ENV || 'local',
-  rpcBackendUrl: process.env.RPC_BACKEND_URL as string,
-  rpcEndpoint: process.env.RPC_ENDPOINT || 'elite.rpc.solanavibestation.com',
+  port: SERVER_CONFIG.PORT,
+  environment: SERVER_CONFIG.ENVIRONMENT,
+  rpcBackendUrl: RPC_CONFIG.BACKEND_URL,
+  rpcEndpoint: RPC_CONFIG.ENDPOINT,
   jwt: {
-    secret: process.env.JWT_SECRET as string,
-    expiresIn: process.env.JWT_EXPIRES_IN ?? '1h',
+    secret: process.env.JWT_SECRET as string, // Keep as env var for security
+    expiresIn: JWT_CONFIG.EXPIRES_IN,
   },
   // Dynamic pricing configuration
-  priceMin: parseFloat(process.env.PRICE_MIN || '0.001'),
-  priceMax: parseFloat(process.env.PRICE_MAX || '0.01'),
-  totalRps: parseInt(process.env.TOTAL_RPS || '10000', 10),
+  priceMin: PRICING_CONFIG.PRICE_MIN,
+  priceMax: PRICING_CONFIG.PRICE_MAX,
+  totalRps: PRICING_CONFIG.TOTAL_RPS,
 }));

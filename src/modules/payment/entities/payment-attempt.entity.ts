@@ -7,7 +7,6 @@ import {
   UpdateDateColumn,
   Index,
   OneToMany,
-  // @ts-ignore - TypeORM types
 } from 'typeorm';
 
 import { PaymentTransaction } from './payment-transaction.entity';

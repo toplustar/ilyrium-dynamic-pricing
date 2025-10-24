@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 
 import { AppLogger } from '~/common/services/app-logger.service';
+import { PaymentStatus } from '../entities/payment-attempt.entity';
 
 import { SolanaService } from './solana.service';
 import { PaymentService } from './payment.service';
@@ -20,7 +21,7 @@ export class TransactionMonitorService implements OnModuleInit {
     logger: AppLogger,
   ) {
     this.logger = logger.forClass('TransactionMonitorService');
-    this.pollInterval = this.configService.get<number>('payment.pollInterval', 10000);
+    this.pollInterval = this.configService.get<number>('payment.pollInterval', 5000);
   }
 
   onModuleInit(): void {
@@ -82,14 +83,12 @@ export class TransactionMonitorService implements OnModuleInit {
     for (const payment of pendingPayments) {
       try {
         if (payment.paymentAddress) {
-          // New system: Check unique address
           await this.checkPaymentByAddress(
             payment.id,
             payment.paymentAddress,
             payment.amountExpected,
           );
         } else if (payment.memo) {
-          // Old system: Check memo (backward compatibility)
           await this.checkPaymentAttempt(payment.id, payment.memo);
         }
       } catch (error) {
@@ -115,10 +114,9 @@ export class TransactionMonitorService implements OnModuleInit {
   ): Promise<void> {
     this.logger.debug(`Checking payment address ${paymentAddress}`);
 
-    // Query transactions to this specific address
     const transactions = await this.solanaService.queryTransactionsByAddress(
       paymentAddress,
-      expectedAmount * 0.99, // Allow 1% tolerance
+      expectedAmount * 0.99,
     );
 
     if (transactions.length === 0) {
@@ -127,6 +125,8 @@ export class TransactionMonitorService implements OnModuleInit {
     }
 
     this.logger.log(`Found ${transactions.length} transactions for ${paymentAddress}`);
+
+    let paymentCompleted = false;
 
     for (const transaction of transactions) {
       try {
@@ -143,10 +143,34 @@ export class TransactionMonitorService implements OnModuleInit {
           signature: transaction.signature,
           amount: transaction.amount,
         });
+
+        const payment = await this.paymentService.getPaymentAttemptById(paymentAttemptId);
+        if (payment && payment.status === PaymentStatus.COMPLETED) {
+          paymentCompleted = true;
+          this.logger.log('🎉 Payment completed immediately!', {
+            paymentId: paymentAttemptId,
+            totalPaid: payment.amountPaid,
+            expectedAmount: payment.amountExpected,
+          });
+          break;
+        }
       } catch (error) {
         this.logger.error(
           'TransactionProcessingError',
           `Failed to process transaction ${transaction.signature}`,
+          { paymentAttemptId, paymentAddress },
+          error as Error,
+        );
+      }
+    }
+
+    if (paymentCompleted) {
+      try {
+        await this.triggerImmediateSweep(paymentAddress, paymentAttemptId);
+      } catch (error) {
+        this.logger.error(
+          'SweepError',
+          `Failed to sweep completed payment`,
           { paymentAttemptId, paymentAddress },
           error as Error,
         );
@@ -192,6 +216,43 @@ export class TransactionMonitorService implements OnModuleInit {
           error as Error,
         );
       }
+    }
+  }
+
+  /**
+   * Immediately sweep completed payment to main wallet
+   */
+  private async triggerImmediateSweep(
+    paymentAddress: string,
+    paymentAttemptId: string,
+  ): Promise<void> {
+    this.logger.log('🚀 Triggering immediate sweep', {
+      paymentAddress,
+      paymentAttemptId,
+    });
+
+    try {
+      const payment = await this.paymentService.getPaymentAttemptById(paymentAttemptId);
+      if (!payment) {
+        this.logger.warn('Payment not found for sweep', { paymentAttemptId });
+        return;
+      }
+
+      await this.paymentService.sweepSinglePayment(payment);
+
+      this.logger.log('✅ Immediate sweep completed', {
+        paymentAttemptId,
+        paymentAddress,
+        amountPaid: payment.amountPaid,
+        tier: payment.tier,
+      });
+    } catch (error) {
+      this.logger.error(
+        'ImmediateSweepError',
+        'Failed to execute immediate sweep',
+        { paymentAddress, paymentAttemptId },
+        error as Error,
+      );
     }
   }
 }

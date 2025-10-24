@@ -1,11 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import * as compression from 'compression';
 
 import { AppModule } from './app.module';
 import { AppLogger } from './common/services/app-logger.service';
+import { SERVER_CONFIG } from './config/constants';
 
 async function bootstrap(): Promise<void> {
   const logger = new AppLogger('Bootstrap');
@@ -14,17 +16,14 @@ async function bootstrap(): Promise<void> {
     logger,
   });
 
-  // Security
   app.use(helmet());
   app.use(compression());
 
-  // CORS
   app.enableCors({
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: SERVER_CONFIG.CORS_ORIGIN,
     credentials: true,
   });
 
-  // Global pipes
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,
@@ -33,12 +32,8 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  // Note: GlobalExceptionFilter is registered in app.module.ts via APP_FILTER
-
-  // API prefix
   app.setGlobalPrefix('api');
 
-  // Swagger documentation
   const config = new DocumentBuilder()
     .setTitle('RPC Proxy Backend')
     .setDescription('NestJS RPC Proxy Backend for Dynamic Pricing System')
@@ -49,15 +44,17 @@ async function bootstrap(): Promise<void> {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api-docs', app, document);
 
-  // Start server
-  const port = process.env.PORT || 3000;
+  const port = SERVER_CONFIG.PORT;
   await app.listen(port);
 
-  logger.log(`Application is running on: http://localhost:${port}`);
-  logger.log(`Swagger docs available at: http://localhost:${port}/api-docs`);
+  const configService = app.get(ConfigService);
+  const baseUrl = configService.get<string>('urls.baseUrl');
+  const swaggerUrl = configService.get<string>('urls.swaggerUrl');
+
+  logger.log(`Application is running on: ${baseUrl}`);
+  logger.log(`Swagger docs available at: ${swaggerUrl}`);
 }
 
-bootstrap().catch(error => {
-  console.error('Failed to bootstrap application:', error);
+bootstrap().catch(_error => {
   process.exit(1);
 });

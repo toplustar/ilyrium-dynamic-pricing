@@ -22,7 +22,6 @@ export class HttpUtil {
       },
     });
 
-    // Request interceptor for logging
     this.axiosInstance.interceptors.request.use(
       request => {
         this.logger.httpRequest(
@@ -35,7 +34,6 @@ export class HttpUtil {
       (error: Error) => Promise.reject(error),
     );
 
-    // Response interceptor for logging
     this.axiosInstance.interceptors.response.use(
       response => {
         this.logger.httpRequest(

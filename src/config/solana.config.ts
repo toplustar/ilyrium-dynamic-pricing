@@ -1,9 +1,10 @@
 import { registerAs } from '@nestjs/config';
+import { SOLANA_CONFIG } from './constants';
 
 export default registerAs('solana', () => ({
-  rpcUrl: process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com',
-  paymentWallet: process.env.SOLANA_PAYMENT_WALLET || '',
-  usdcMint: process.env.SOLANA_USDC_MINT || 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
-  confirmationCount: parseInt(process.env.SOLANA_CONFIRMATION_COUNT || '1', 10),
-  useNativeSOL: process.env.SOLANA_USE_NATIVE_SOL === 'true' || true,
+  rpcUrl: SOLANA_CONFIG.PAYMENT_RPC_URL,
+  paymentWallet: process.env.SOLANA_PAYMENT_WALLET as string, // Keep as env var for security
+  usdcMint: SOLANA_CONFIG.USDC_MINT,
+  confirmationCount: SOLANA_CONFIG.CONFIRMATION_COUNT,
+  useNativeSOL: SOLANA_CONFIG.USE_NATIVE_SOL,
 }));

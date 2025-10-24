@@ -1,4 +1,4 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -9,6 +9,7 @@ import paymentConfig from '~/config/payment.config';
 
 import { Purchase } from '../pricing/entities/purchase.entity';
 import { PricingModule } from '../pricing/pricing.module';
+import { ApiKeyModule } from '../api-key/api-key.module';
 
 import { PaymentAttempt } from './entities/payment-attempt.entity';
 import { PaymentTransaction } from './entities/payment-transaction.entity';
@@ -24,7 +25,7 @@ import { PaymentSweepService } from './services/payment-sweep.service';
     ConfigModule.forFeature(paymentConfig),
     ScheduleModule.forRoot(),
     PricingModule,
-    forwardRef(() => import('../telegram-bot/telegram-bot.module').then(m => m.TelegramBotModule)),
+    ApiKeyModule,
   ],
   providers: [
     {

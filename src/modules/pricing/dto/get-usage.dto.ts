@@ -9,7 +9,6 @@ export class GetUsageQueryDto {
   walletAddress: string;
 }
 
-// Re-export for convenience
 export { PurchaseInfoDto } from './purchase-info.dto';
 export { UsageActivityDto } from './usage-activity.dto';
 export { GetUsageResponseDto } from './get-usage-response.dto';

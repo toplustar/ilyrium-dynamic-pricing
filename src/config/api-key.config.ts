@@ -1,6 +1,7 @@
 import { registerAs } from '@nestjs/config';
+import { API_KEY_CONFIG } from './constants';
 
 export default registerAs('apiKey', () => ({
-  prefix: process.env.API_KEY_PREFIX || 'il_',
-  expiryDays: parseInt(process.env.API_KEY_EXPIRY_DAYS || '365', 10),
+  prefix: API_KEY_CONFIG.PREFIX,
+  expiryDays: API_KEY_CONFIG.EXPIRY_DAYS,
 }));

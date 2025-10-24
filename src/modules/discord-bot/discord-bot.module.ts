@@ -10,6 +10,7 @@ import { DiscordUser } from './entities/discord-user.entity';
 import { DiscordBotService } from './services/discord-bot.service';
 import { DiscordUserService } from './services/discord-user.service';
 import { PurchaseService } from './services/purchase.service';
+import { DiscordNotificationService } from './services/discord-notification.service';
 
 @Module({
   imports: [
@@ -19,7 +20,7 @@ import { PurchaseService } from './services/purchase.service';
     forwardRef(() => PricingModule),
     forwardRef(() => ApiKeyModule),
   ],
-  providers: [DiscordBotService, DiscordUserService, PurchaseService],
-  exports: [DiscordBotService, DiscordUserService],
+  providers: [DiscordBotService, DiscordUserService, PurchaseService, DiscordNotificationService],
+  exports: [DiscordBotService, DiscordUserService, DiscordNotificationService],
 })
 export class DiscordBotModule {}

@@ -72,5 +72,4 @@ export class EnvironmentUtil {
   }
 }
 
-// Initialize on module load
 EnvironmentUtil.initialize();
