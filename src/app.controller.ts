@@ -1,4 +1,6 @@
-import { Controller, Get, Post, HttpStatus, Param } from '@nestjs/common';
+import { Controller, Get, Post, HttpStatus, Param, Res } from '@nestjs/common';
+import { Response } from 'express';
+import { join } from 'path';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 
@@ -522,6 +524,16 @@ export class AppController {
         error: error.message,
       };
     }
+  }
+
+  @Get('dashboard')
+  @ApiOperation({
+    summary: 'Analytics Dashboard',
+    description: 'Serve the live analytics dashboard HTML page',
+  })
+  getDashboard(@Res() res: Response): void {
+    const dashboardPath = join(process.cwd(), 'public', 'analytics-dashboard.html');
+    res.sendFile(dashboardPath);
   }
 
   @Get('rpc-info')

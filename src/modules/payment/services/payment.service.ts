@@ -373,7 +373,7 @@ export class PaymentService {
     const purchase = this.purchaseRepository.create({
       userId: paymentAttempt.userId,
       paymentAttemptId: paymentAttempt.id,
-      walletAddress: 'discord-user',
+      walletAddress: paymentAttempt.paymentAddress || 'discord-user',
       tier: paymentAttempt.tier,
       rpsAllocated: tierInfo.rps,
       price: paymentAttempt.amountPaid,

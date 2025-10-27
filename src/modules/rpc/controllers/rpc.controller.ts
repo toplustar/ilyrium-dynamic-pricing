@@ -10,10 +10,14 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { Repository, MoreThan, MoreThanOrEqual } from 'typeorm';
+import { InjectRepository } from '@nestjs/typeorm';
 import { ApiTags, ApiOperation, ApiResponse, ApiHeader } from '@nestjs/swagger';
 
 import { AppLogger } from '~/common/services/app-logger.service';
 import { TierBasedRateLimitGuard } from '~/common/guards/tier-based-rate-limit.guard';
+import { UsageMetrics } from '~/modules/pricing/entities/usage-metrics.entity';
+import { Purchase } from '~/modules/pricing/entities/purchase.entity';
 
 import { RpcService } from '../services/rpc.service';
 
@@ -36,6 +40,10 @@ interface AuthenticatedRequest extends Request {
 export class RpcController {
   constructor(
     private readonly rpcService: RpcService,
+    @InjectRepository(UsageMetrics)
+    private readonly usageMetricsRepository: Repository<UsageMetrics>,
+    @InjectRepository(Purchase)
+    private readonly purchaseRepository: Repository<Purchase>,
     private readonly logger: AppLogger,
   ) {
     this.logger = logger.forClass('RpcController');
@@ -110,6 +118,9 @@ export class RpcController {
       res.setHeader('X-User-ID', req.user.userId);
 
       res.status(200).json(response);
+
+      // Track usage metrics
+      await this.trackUsage(req.user.userId, req.user.apiKeyId, body.method);
     } catch (error) {
       this.logger.error(
         'RPC request failed',
@@ -172,6 +183,69 @@ export class RpcController {
         error: error.message,
         timestamp: new Date().toISOString(),
       });
+    }
+  }
+
+  /**
+   * Track usage metrics for analytics
+   */
+  private async trackUsage(userId: string, apiKeyId: string, method: string): Promise<void> {
+    try {
+      // Get the user's wallet address from their active purchase
+      const activePurchase = await this.purchaseRepository.findOne({
+        where: {
+          userId,
+          isActive: true,
+          expiresAt: MoreThan(new Date()),
+        },
+        order: { createdAt: 'DESC' },
+      });
+
+      if (!activePurchase) {
+        this.logger.warn('No active purchase found for user', { userId });
+        return;
+      }
+
+      // Check if there's already a usage metric record for today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const existingMetric = await this.usageMetricsRepository.findOne({
+        where: {
+          walletAddress: activePurchase.walletAddress,
+          endpoint: method,
+          createdAt: MoreThanOrEqual(today),
+        },
+      });
+
+      if (existingMetric) {
+        // Update existing record
+        existingMetric.requestCount += 1;
+        await this.usageMetricsRepository.save(existingMetric);
+      } else {
+        // Create new record
+        const usageMetric = this.usageMetricsRepository.create({
+          apiKeyId,
+          walletAddress: activePurchase.walletAddress,
+          requestCount: 1,
+          endpoint: method,
+        });
+        await this.usageMetricsRepository.save(usageMetric);
+      }
+
+      this.logger.debug('Usage tracked', {
+        userId,
+        walletAddress: activePurchase.walletAddress,
+        method,
+        apiKeyId,
+      });
+    } catch (error) {
+      this.logger.error(
+        'Failed to track usage',
+        'RpcController',
+        { userId, method },
+        error as Error,
+      );
     }
   }
 }
