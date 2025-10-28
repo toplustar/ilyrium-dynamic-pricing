@@ -6,6 +6,7 @@ import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 
 import { AppLogger } from '~/common/services/app-logger.service';
+import { HistoricalDataLogger } from '~/modules/analytics/services/historical-data-logger.service';
 
 import { ApiKey } from '../entities/api-key.entity';
 
@@ -40,6 +41,7 @@ export class ApiKeyService {
     @InjectRepository(ApiKey)
     private readonly apiKeyRepository: Repository<ApiKey>,
     private readonly configService: ConfigService,
+    private readonly historicalDataLogger: HistoricalDataLogger,
     logger: AppLogger,
   ) {
     this.logger = logger.forClass('ApiKeyService');
@@ -282,6 +284,36 @@ export class ApiKeyService {
    * Cleanup expired keys
    */
   async cleanupExpiredKeys(): Promise<number> {
+    // First, find expired keys to log them before cleanup
+    const expiredKeys = await this.apiKeyRepository.find({
+      where: { expiresAt: LessThan(new Date()), isActive: true },
+    });
+
+    // Log expiration events for each expired key
+    for (const key of expiredKeys) {
+      try {
+        await this.historicalDataLogger.logExpiration({
+          tier: 'api-key',
+          rpsAllocated: 0, // API keys don't have direct RPS allocation
+          walletAddress: key.userId,
+          expiredAt: key.expiresAt,
+        });
+
+        this.logger.log('API key expiration event logged', {
+          apiKeyId: key.id,
+          userId: key.userId,
+          expiredAt: key.expiresAt,
+        });
+      } catch (error) {
+        this.logger.error(
+          'Failed to log API key expiration event',
+          'ApiKeyService',
+          { apiKeyId: key.id },
+          error as Error,
+        );
+      }
+    }
+
     const result = await this.apiKeyRepository.update(
       { expiresAt: LessThan(new Date()), isActive: true },
       { isActive: false, revokedAt: new Date() },

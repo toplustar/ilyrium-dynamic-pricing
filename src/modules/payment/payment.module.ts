@@ -10,6 +10,7 @@ import paymentConfig from '~/config/payment.config';
 import { Purchase } from '../pricing/entities/purchase.entity';
 import { PricingModule } from '../pricing/pricing.module';
 import { ApiKeyModule } from '../api-key/api-key.module';
+import { AnalyticsModule } from '../analytics/analytics.module';
 
 import { PaymentAttempt } from './entities/payment-attempt.entity';
 import { PaymentTransaction } from './entities/payment-transaction.entity';
@@ -26,6 +27,7 @@ import { PaymentSweepService } from './services/payment-sweep.service';
     ScheduleModule.forRoot(),
     PricingModule,
     ApiKeyModule,
+    AnalyticsModule,
   ],
   providers: [
     {

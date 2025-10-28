@@ -5,6 +5,7 @@ import { CommonModule } from '~/common/common.module';
 import { PaymentModule } from '~/modules/payment/payment.module';
 import { PricingModule } from '~/modules/pricing/pricing.module';
 import { ApiKeyModule } from '~/modules/api-key/api-key.module';
+import { AnalyticsModule } from '~/modules/analytics/analytics.module';
 
 import { DiscordUser } from './entities/discord-user.entity';
 import { DiscordBotService } from './services/discord-bot.service';
@@ -19,6 +20,7 @@ import { DiscordNotificationService } from './services/discord-notification.serv
     forwardRef(() => PaymentModule),
     forwardRef(() => PricingModule),
     forwardRef(() => ApiKeyModule),
+    forwardRef(() => AnalyticsModule),
   ],
   providers: [DiscordBotService, DiscordUserService, PurchaseService, DiscordNotificationService],
   exports: [DiscordBotService, DiscordUserService, DiscordNotificationService],

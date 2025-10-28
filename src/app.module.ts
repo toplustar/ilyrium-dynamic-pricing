@@ -26,6 +26,7 @@ import { PaymentModule } from './modules/payment/payment.module';
 import { ApiKeyModule } from './modules/api-key/api-key.module';
 import { DiscordBotModule } from './modules/discord-bot/discord-bot.module';
 import { RpcModule } from './modules/rpc/rpc.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { AppLogger } from './common/services/app-logger.service';
@@ -89,6 +90,7 @@ import { ApiKeyMiddleware } from './modules/api-key/middleware/api-key.middlewar
     ApiKeyModule,
     DiscordBotModule,
     RpcModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [
