@@ -116,8 +116,7 @@ export class PricingEngineService {
       await this.cacheService.set('solana:onchain_activity', normalizedActivity.toString(), 30000);
 
       return normalizedActivity;
-    } catch (error) {
-      console.warn('Failed to get Solana on-chain activity, using default value:', error);
+    } catch {
       return 0.5;
     }
   }
@@ -137,8 +136,7 @@ export class PricingEngineService {
       const tps = recentTransactions.length / 60;
 
       return Math.min(tps / 1000, 1);
-    } catch (error) {
-      console.warn('Failed to get transaction activity:', error);
+    } catch {
       return 0.5;
     }
   }
@@ -155,8 +153,7 @@ export class PricingEngineService {
       const activity = Math.max(0, 1 - timeSinceLastBlock / targetBlockTime);
 
       return Math.min(activity, 1);
-    } catch (error) {
-      console.warn('Failed to get block production activity:', error);
+    } catch {
       return 0.5;
     }
   }
@@ -179,8 +176,7 @@ export class PricingEngineService {
       const congestionFactor = Math.min(avgSlotTime / 0.5, 1);
 
       return (transactionActivity + (1 - congestionFactor)) / 2;
-    } catch (error) {
-      console.warn('Failed to get network congestion:', error);
+    } catch {
       return 0.5;
     }
   }

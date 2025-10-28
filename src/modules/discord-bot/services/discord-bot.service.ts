@@ -360,25 +360,19 @@ export class DiscordBotService implements OnModuleInit {
    */
   private async handleAnalyticsCommand(message: Message): Promise<void> {
     try {
-      const dashboard = await this.discordAnalyticsService.createAnalyticsDashboard();
+      await this.discordAnalyticsService.sendAnalyticsWithCharts();
 
-      await message.channel.send({
-        content: '📊 **Live Analytics Dashboard**',
-        embeds: dashboard.embeds,
-        components: dashboard.components,
-      } as any);
-
-      this.logger.log('Analytics dashboard sent', { channelId: message.channelId });
+      this.logger.log('Analytics charts sent', { channelId: message.channelId });
     } catch (error) {
       this.logger.error(
-        'Failed to send analytics dashboard',
+        'Failed to send analytics charts',
         'DiscordBotService',
         { channelId: message.channelId },
         error as Error,
       );
 
       await message.channel.send({
-        content: '❌ Failed to load analytics dashboard. Please try again later.',
+        content: '❌ Failed to load analytics charts. Please try again later.',
       });
     }
   }
@@ -390,25 +384,23 @@ export class DiscordBotService implements OnModuleInit {
     try {
       await interaction.deferUpdate();
 
-      const dashboard = await this.discordAnalyticsService.createAnalyticsDashboard();
+      await this.discordAnalyticsService.sendAnalyticsWithCharts();
 
       await interaction.editReply({
-        content: '📊 **Live Analytics Dashboard** (Refreshed)',
-        embeds: dashboard.embeds,
-        components: dashboard.components,
-      } as any);
+        content: '📊 **Analytics Charts Refreshed** - New charts sent to channel',
+      });
 
-      this.logger.log('Analytics dashboard refreshed', { userId: interaction.user.id });
+      this.logger.log('Analytics charts refreshed', { userId: interaction.user.id });
     } catch (error) {
       this.logger.error(
-        'Failed to refresh analytics dashboard',
+        'Failed to refresh analytics charts',
         'DiscordBotService',
         { userId: interaction.user.id },
         error as Error,
       );
 
       await interaction.editReply({
-        content: '❌ Failed to refresh analytics dashboard.',
+        content: '❌ Failed to refresh analytics charts.',
       });
     }
   }

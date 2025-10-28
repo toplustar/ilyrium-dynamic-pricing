@@ -223,6 +223,11 @@
         <h3>💰 Price Trends (Last 24 Hours)</h3>
         <canvas id="priceChart" width="400" height="200"></canvas>
       </div>
+
+      <div class="chart-container">
+        <h3>📈 Revenue Trends (Last 24 Hours)</h3>
+        <canvas id="revenueChart" width="400" height="200"></canvas>
+      </div>
     </div>
 
     <script>
@@ -231,6 +236,7 @@
           this.socket = null;
           this.usageChart = null;
           this.priceChart = null;
+          this.revenueChart = null;
           this.isConnected = false;
 
           this.init();
@@ -238,6 +244,7 @@
 
         async init() {
           await this.loadInitialData();
+          await this.loadHistoricalData();
           this.initWebSocket();
           this.initCharts();
           this.setupRefreshButton();
@@ -371,18 +378,155 @@
               },
             },
           });
+
+          // Revenue Chart
+          const revenueCtx = document.getElementById('revenueChart').getContext('2d');
+          this.revenueChart = new Chart(revenueCtx, {
+            type: 'line',
+            data: {
+              labels: [],
+              datasets: [
+                {
+                  label: 'Daily Revenue (SOL)',
+                  data: [],
+                  borderColor: '#38a169',
+                  backgroundColor: 'rgba(56, 161, 105, 0.1)',
+                  tension: 0.4,
+                },
+                {
+                  label: 'Active Users',
+                  data: [],
+                  borderColor: '#e53e3e',
+                  backgroundColor: 'rgba(229, 62, 62, 0.1)',
+                  tension: 0.4,
+                  yAxisID: 'y1',
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              scales: {
+                y: {
+                  type: 'linear',
+                  display: true,
+                  position: 'left',
+                },
+                y1: {
+                  type: 'linear',
+                  display: true,
+                  position: 'right',
+                  grid: {
+                    drawOnChartArea: false,
+                  },
+                },
+              },
+            },
+          });
         }
 
         updateDashboard(data) {
           if (data.nodeUsage) {
             this.updateNodeUsageMetrics(data.nodeUsage);
+            this.updateUsageChart(data.nodeUsage);
           }
           if (data.priceTrend) {
             this.updatePricingMetrics(data.priceTrend);
+            this.updatePriceChart(data.priceTrend);
           }
           if (data.revenue && data.userStats) {
             this.updateRevenueMetrics(data.revenue, data.userStats);
           }
+        }
+
+        async loadHistoricalData() {
+          try {
+            const response = await fetch('/api/analytics/historical?hours=24');
+            const historicalData = await response.json();
+
+            if (historicalData.nodeUsage && historicalData.priceTrend) {
+              this.updateChartsWithHistoricalData(historicalData);
+            }
+          } catch (error) {
+            console.error('Failed to load historical data:', error);
+          }
+        }
+
+        updateChartsWithHistoricalData(historicalData) {
+          const labels = historicalData.nodeUsage.map((_, index) => {
+            const date = new Date();
+            date.setHours(date.getHours() - (historicalData.nodeUsage.length - index - 1));
+            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+          });
+
+          // Update Usage Chart
+          if (this.usageChart) {
+            this.usageChart.data.labels = labels;
+            this.usageChart.data.datasets[0].data = historicalData.nodeUsage.map(
+              d => d.totalRequests,
+            );
+            this.usageChart.data.datasets[1].data = historicalData.nodeUsage.map(
+              d => d.utilizationPercentage,
+            );
+            this.usageChart.update();
+          }
+
+          // Update Price Chart
+          if (this.priceChart) {
+            this.priceChart.data.labels = labels;
+            this.priceChart.data.datasets[0].data = historicalData.priceTrend.map(
+              d => d.currentPrice,
+            );
+            this.priceChart.data.datasets[1].data = historicalData.priceTrend.map(
+              d => d.onChainActivity * 100,
+            );
+            this.priceChart.update();
+          }
+        }
+
+        updateUsageChart(nodeUsage) {
+          if (!this.usageChart) return;
+
+          const now = new Date().toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+
+          // Add new data point
+          this.usageChart.data.labels.push(now);
+          this.usageChart.data.datasets[0].data.push(nodeUsage.totalRequests);
+          this.usageChart.data.datasets[1].data.push(nodeUsage.utilizationPercentage);
+
+          // Keep only last 20 data points
+          if (this.usageChart.data.labels.length > 20) {
+            this.usageChart.data.labels.shift();
+            this.usageChart.data.datasets[0].data.shift();
+            this.usageChart.data.datasets[1].data.shift();
+          }
+
+          this.usageChart.update('none');
+        }
+
+        updatePriceChart(priceTrend) {
+          if (!this.priceChart) return;
+
+          const now = new Date().toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+
+          // Add new data point
+          this.priceChart.data.labels.push(now);
+          this.priceChart.data.datasets[0].data.push(priceTrend.currentPrice);
+          this.priceChart.data.datasets[1].data.push(priceTrend.onChainActivity * 100);
+
+          // Keep only last 20 data points
+          if (this.priceChart.data.labels.length > 20) {
+            this.priceChart.data.labels.shift();
+            this.priceChart.data.datasets[0].data.shift();
+            this.priceChart.data.datasets[1].data.shift();
+          }
+
+          this.priceChart.update('none');
         }
 
         updateNodeUsageMetrics(nodeUsage) {
@@ -504,7 +648,10 @@
           const refreshBtn = document.createElement('button');
           refreshBtn.className = 'refresh-btn';
           refreshBtn.textContent = '🔄 Refresh Data';
-          refreshBtn.onclick = () => this.loadInitialData();
+          refreshBtn.onclick = async () => {
+            await this.loadInitialData();
+            await this.loadHistoricalData();
+          };
           header.appendChild(refreshBtn);
         }
       }

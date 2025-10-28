@@ -9,6 +9,7 @@ import { PricingEngineService } from '~/modules/pricing/services/pricing-engine.
 import { Purchase } from '~/modules/pricing/entities/purchase.entity';
 import { TierType } from '~/modules/pricing/entities/tier.enum';
 import { ApiKeyService } from '~/modules/api-key/services/api-key.service';
+import { HistoricalDataLogger } from '~/modules/analytics/services/historical-data-logger.service';
 
 import { PaymentTransaction } from '../entities/payment-transaction.entity';
 import { PaymentAttempt, PaymentStatus } from '../entities/payment-attempt.entity';
@@ -68,6 +69,7 @@ export class PaymentService {
     private readonly pricingEngineService: PricingEngineService,
     private readonly solanaService: SolanaService,
     private readonly apiKeyService: ApiKeyService,
+    private readonly historicalDataLogger: HistoricalDataLogger,
     logger: AppLogger,
   ) {
     this.logger = logger.forClass('PaymentService');
@@ -384,6 +386,9 @@ export class PaymentService {
 
     await this.purchaseRepository.save(purchase);
 
+    // Log purchase event to historical data
+    await this.logPurchaseEvent(purchase, paymentAttempt, tierInfo.rps);
+
     let generatedApiKey: any = null;
     try {
       generatedApiKey = await this.apiKeyService.createApiKey(
@@ -625,5 +630,38 @@ export class PaymentService {
       status: paymentAttempt.status,
       amountPaid: paymentAttempt.amountPaid,
     });
+  }
+
+  /**
+   * Log purchase event to historical data
+   */
+  private async logPurchaseEvent(
+    purchase: Purchase,
+    paymentAttempt: PaymentAttempt,
+    rpsAllocated: number,
+  ): Promise<void> {
+    try {
+      await this.historicalDataLogger.logPurchase({
+        tier: paymentAttempt.tier,
+        rpsAllocated,
+        price: paymentAttempt.amountPaid,
+        duration: paymentAttempt.duration,
+        walletAddress: paymentAttempt.paymentAddress || 'discord-user',
+      });
+
+      this.logger.log('Purchase event logged to historical data', {
+        purchaseId: purchase.id,
+        tier: paymentAttempt.tier,
+        rpsAllocated,
+        price: paymentAttempt.amountPaid,
+      });
+    } catch (error) {
+      this.logger.error(
+        'Failed to log purchase event',
+        'PaymentService',
+        { purchaseId: purchase.id },
+        error as Error,
+      );
+    }
   }
 }

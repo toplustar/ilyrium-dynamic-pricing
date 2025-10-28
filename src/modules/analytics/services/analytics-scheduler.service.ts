@@ -142,52 +142,9 @@ export class AnalyticsSchedulerService implements OnModuleInit {
   @Cron('0 9 * * 1')
   async sendWeeklyReport(): Promise<void> {
     try {
-      const analytics = await this.analyticsService.getSystemAnalytics();
-      const historicalData = await this.analyticsService.getHistoricalData(168);
+      await this.discordAnalyticsService.sendAnalyticsWithCharts();
 
-      await this.discordAnalyticsService.sendCustomReport(
-        '📊 Weekly Analytics Report',
-        'Comprehensive weekly performance summary',
-        {
-          summary: {
-            totalRequests: historicalData.nodeUsage.reduce(
-              (sum: number, d: { totalRequests: number }) => sum + d.totalRequests,
-              0,
-            ),
-            averageUtilization:
-              historicalData.nodeUsage.reduce(
-                (sum: number, d: { utilizationPercentage: number }) =>
-                  sum + d.utilizationPercentage,
-                0,
-              ) / historicalData.nodeUsage.length,
-            peakUtilization: Math.max(
-              ...historicalData.nodeUsage.map(
-                (d: { utilizationPercentage: number }) => d.utilizationPercentage,
-              ),
-            ),
-            revenue: analytics.revenue.weekly,
-            newUsers: analytics.userStats.newUsersToday * 7,
-          },
-          trends: {
-            priceChange:
-              historicalData.priceTrend.length > 1
-                ? (((historicalData.priceTrend[historicalData.priceTrend.length - 1]
-                    ?.currentPrice || 0) -
-                    (historicalData.priceTrend[0]?.currentPrice || 0)) /
-                    (historicalData.priceTrend[0]?.currentPrice || 1)) *
-                  100
-                : 0,
-            utilizationTrend:
-              historicalData.nodeUsage.length > 1
-                ? (historicalData.nodeUsage[historicalData.nodeUsage.length - 1]
-                    ?.utilizationPercentage || 0) -
-                  (historicalData.nodeUsage[0]?.utilizationPercentage || 0)
-                : 0,
-          },
-        },
-      );
-
-      this.logger.log('Weekly analytics report sent');
+      this.logger.log('Weekly analytics report with charts sent');
     } catch (error) {
       this.logger.error(
         'Failed to send weekly report',
@@ -207,24 +164,9 @@ export class AnalyticsSchedulerService implements OnModuleInit {
       const analytics = await this.analyticsService.getSystemAnalytics();
 
       if (analytics.revenue.monthly > 0) {
-        await this.discordAnalyticsService.sendCustomReport(
-          '🎉 Monthly Revenue Milestone',
-          `Monthly revenue reached ${analytics.revenue.monthly.toFixed(4)} SOL`,
-          {
-            revenue: {
-              monthly: analytics.revenue.monthly,
-              daily: analytics.revenue.daily,
-              weekly: analytics.revenue.weekly,
-            },
-            metrics: {
-              activeUsers: analytics.userStats.totalActiveUsers,
-              utilization: analytics.nodeUsage.utilizationPercentage,
-              totalRequests: analytics.nodeUsage.totalRequests,
-            },
-          },
-        );
+        await this.discordAnalyticsService.sendAnalyticsWithCharts();
 
-        this.logger.log('Monthly revenue milestone sent', {
+        this.logger.log('Monthly revenue milestone with charts sent', {
           monthlyRevenue: analytics.revenue.monthly,
         });
       }
