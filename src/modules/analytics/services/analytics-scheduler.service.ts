@@ -25,6 +25,40 @@ export class AnalyticsSchedulerService implements OnModuleInit {
 
   onModuleInit(): void {
     this.logger.log('Analytics Scheduler service initialized');
+
+    // Initialize live analytics chart on startup (after 10 seconds delay to ensure Discord is ready)
+    setTimeout(async () => {
+      try {
+        await this.discordAnalyticsService.updateLiveAnalytics();
+        this.logger.log('Initial live analytics chart created');
+      } catch (error) {
+        this.logger.error(
+          'Failed to create initial live analytics chart',
+          'AnalyticsSchedulerService',
+          {},
+          error as Error,
+        );
+      }
+    }, 10000);
+  }
+
+  /**
+   * Update live analytics chart every 2 hours (backup for event-driven updates)
+   */
+  @Cron('0 */2 * * *')
+  async updateLiveAnalyticsChart(): Promise<void> {
+    try {
+      await this.discordAnalyticsService.updateLiveAnalytics();
+
+      this.logger.log('Live analytics chart updated automatically (backup)');
+    } catch (error) {
+      this.logger.error(
+        'Failed to update live analytics chart',
+        'AnalyticsSchedulerService',
+        {},
+        error as Error,
+      );
+    }
   }
 
   /**

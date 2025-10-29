@@ -8,6 +8,7 @@ import { AnalyticsService } from './analytics.service';
 @Injectable()
 export class DiscordAnalyticsService implements OnModuleInit {
   private readonly logger: AppLogger;
+  private liveAnalyticsMessageId: string | null = null;
 
   constructor(
     private readonly analyticsService: AnalyticsService,
@@ -496,6 +497,122 @@ export class DiscordAnalyticsService implements OnModuleInit {
     } catch (error) {
       this.logger.error(
         'Failed to send analytics with charts',
+        'DiscordAnalyticsService',
+        {},
+        error as Error,
+      );
+    }
+  }
+
+  /**
+   * Create live analytics embed
+   */
+  private async createLiveAnalyticsEmbed(): Promise<EmbedBuilder> {
+    const analytics = await this.analyticsService.getSystemAnalytics();
+    const priceDemandChartUrl = await this.createPriceDemandChartFromSystemEvents(24);
+
+    return new EmbedBuilder()
+      .setColor(0xff9f40)
+      .setTitle('📊 Price & Demand History (24h) - Live')
+      .setDescription(
+        '**How to read this chart:**\n' +
+          '🟠 **Orange** = Price per RPS (×10⁻³ SOL for visibility)\n' +
+          '🔵 **Cyan** = Demand/Utilization (%)\n' +
+          '🟣 **Purple** = On-Chain Activity (%)\n\n' +
+          '💡 When demand ↑ → Price ↑  |  When demand ↓ → Price ↓\n' +
+          '⚡ *Updates instantly when system events occur*',
+      )
+      .addFields(
+        {
+          name: '💰 Current Price',
+          value: `${analytics.priceTrend.currentPrice.toFixed(6)} SOL`,
+          inline: true,
+        },
+        {
+          name: '📈 Demand',
+          value: `${analytics.priceTrend.utilization.toFixed(1)}%`,
+          inline: true,
+        },
+        {
+          name: '👥 Active Users',
+          value: `${analytics.nodeUsage.activeUsers}`,
+          inline: true,
+        },
+      )
+      .setImage(priceDemandChartUrl)
+      .setTimestamp();
+  }
+
+  /**
+   * Update or create live analytics message in Discord
+   */
+  private async updateOrCreateLiveMessage(channel: any, embed: EmbedBuilder): Promise<void> {
+    // Try to update existing message
+    if (this.liveAnalyticsMessageId) {
+      try {
+        const message = await channel.messages.fetch(this.liveAnalyticsMessageId);
+        await message.edit({
+          content: '📊 **Price & Demand Analytics** *(Live Update)*',
+          embeds: [embed.toJSON()],
+        });
+        this.logger.log('Live analytics chart updated', {
+          messageId: this.liveAnalyticsMessageId,
+        });
+        return;
+      } catch (error) {
+        this.logger.warn('Could not update existing message, creating new one', {
+          oldMessageId: this.liveAnalyticsMessageId,
+          error: (error as Error).message,
+        });
+        this.liveAnalyticsMessageId = null;
+      }
+    }
+
+    // Create new message if we don't have one
+    const message = await channel.send({
+      content: '📊 **Price & Demand Analytics** *(Live Update)*',
+      embeds: [embed.toJSON()],
+    });
+    this.liveAnalyticsMessageId = message.id;
+    this.logger.log('Live analytics chart created', {
+      messageId: this.liveAnalyticsMessageId,
+    });
+  }
+
+  /**
+   * Update or create live analytics chart that auto-refreshes
+   */
+  async updateLiveAnalytics(): Promise<void> {
+    try {
+      const embed = await this.createLiveAnalyticsEmbed();
+
+      const analyticsChannelId = this.discordBotService['configService'].get<string>(
+        'discord.analyticsChannelId',
+      );
+
+      if (!analyticsChannelId) {
+        this.logger.warn(
+          'DISCORD_ANALYTICS_CHANNEL_ID not configured - live analytics will not be sent',
+        );
+        return;
+      }
+
+      const channel = await this.discordBotService.getClient()?.channels.fetch(analyticsChannelId);
+      if (!channel?.isTextBased()) {
+        this.logger.error(
+          'Analytics channel not found or not text-based',
+          'DiscordAnalyticsService',
+          {
+            analyticsChannelId,
+          },
+        );
+        return;
+      }
+
+      await this.updateOrCreateLiveMessage(channel as any, embed);
+    } catch (error) {
+      this.logger.error(
+        'Failed to update live analytics',
         'DiscordAnalyticsService',
         {},
         error as Error,

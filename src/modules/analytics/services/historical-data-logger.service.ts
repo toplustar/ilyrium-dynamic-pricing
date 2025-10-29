@@ -1,10 +1,11 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThanOrEqual } from 'typeorm';
 
 import { AppLogger } from '~/common/services/app-logger.service';
 import { SystemEvent, SystemEventType } from '../entities/system-event.entity';
 import { AnalyticsService } from './analytics.service';
+import { DiscordAnalyticsService } from './discord-analytics.service';
 
 export interface EventData {
   eventType: SystemEventType;
@@ -25,6 +26,8 @@ export class HistoricalDataLogger implements OnModuleInit {
     @InjectRepository(SystemEvent)
     private readonly systemEventRepository: Repository<SystemEvent>,
     private readonly analyticsService: AnalyticsService,
+    @Inject(forwardRef(() => DiscordAnalyticsService))
+    private readonly discordAnalyticsService: DiscordAnalyticsService,
     logger: AppLogger,
   ) {
     this.logger = logger.forClass('HistoricalDataLogger');
@@ -202,6 +205,9 @@ export class HistoricalDataLogger implements OnModuleInit {
         priceData: priceData.currentPrice,
         utilization: usageData.utilizationPercentage,
       });
+
+      // Trigger live analytics update for price/usage related events
+      this.triggerLiveAnalyticsUpdate(eventData.eventType);
     } catch (error) {
       this.logger.error(
         'Failed to log system event',
@@ -334,6 +340,44 @@ export class HistoricalDataLogger implements OnModuleInit {
       }));
 
     return { nodeUsage, priceTrend };
+  }
+
+  /**
+   * Trigger live analytics update for relevant events
+   */
+  private triggerLiveAnalyticsUpdate(eventType: SystemEventType): void {
+    try {
+      // Only update live analytics for events that affect price/demand
+      const relevantEvents = [
+        SystemEventType.RPS_CHANGE,
+        SystemEventType.CHAIN_ACTIVITY_CHANGE,
+        SystemEventType.PURCHASE,
+        SystemEventType.EXPIRATION,
+        SystemEventType.MANUAL_ADJUST,
+      ];
+
+      if (relevantEvents.includes(eventType)) {
+        // Use setTimeout to avoid blocking the main event logging
+        setTimeout(async () => {
+          try {
+            await this.discordAnalyticsService.updateLiveAnalytics();
+            this.logger.debug('Live analytics updated due to system event', {
+              eventType,
+            });
+          } catch (error) {
+            this.logger.warn('Failed to update live analytics after system event', {
+              eventType,
+              error: (error as Error).message,
+            });
+          }
+        }, 1000); // 1 second delay to ensure data is fully processed
+      }
+    } catch (error) {
+      this.logger.warn('Error triggering live analytics update', {
+        eventType,
+        error: (error as Error).message,
+      });
+    }
   }
 
   /**
