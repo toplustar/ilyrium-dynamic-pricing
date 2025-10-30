@@ -32,7 +32,22 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix('api', {
+    exclude: [
+      '/health',
+      '/',
+      '/favicon.ico',
+      '/dashboard',
+      '/init-discord-channel',
+      '/payment-status',
+      '/regenerate-api-key',
+      '/my-api-keys',
+      '/debug',
+      '/manual-process',
+      '/force-complete',
+      '/rpc-info',
+    ],
+  });
 
   const config = new DocumentBuilder()
     .setTitle('RPC Proxy Backend')
