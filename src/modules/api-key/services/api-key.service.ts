@@ -374,15 +374,43 @@ export class ApiKeyService {
    * Regenerate API key for a user (when original was lost)
    */
   async regenerateApiKey(userId: string, oldKeyId?: string): Promise<CreateApiKeyResponse> {
+    // Try to preserve original key metadata (name and expiry)
+    let preservedName: string | undefined;
+    let preservedExpiry: Date | undefined;
+
     if (oldKeyId) {
-      await this.apiKeyRepository.update(oldKeyId, {
-        isActive: false,
-        revokedAt: new Date(),
+      const oldKey = await this.apiKeyRepository.findOne({ where: { id: oldKeyId } });
+      if (oldKey) {
+        preservedName = oldKey.name;
+        preservedExpiry = oldKey.expiresAt;
+        await this.apiKeyRepository.update(oldKeyId, {
+          isActive: false,
+          revokedAt: new Date(),
+        });
+        this.logger.log('Deactivated old API key', { oldKeyId, userId });
+      }
+    } else {
+      // Fall back to the most recent active key to preserve metadata
+      const recentActive = await this.apiKeyRepository.findOne({
+        where: { userId, isActive: true },
+        order: { createdAt: 'DESC' },
       });
-      this.logger.log('Deactivated old API key', { oldKeyId, userId });
+      if (recentActive) {
+        preservedName = recentActive.name;
+        preservedExpiry = recentActive.expiresAt;
+        // Also deactivate the most recent active key to ensure the original is disabled
+        await this.apiKeyRepository.update(recentActive.id, {
+          isActive: false,
+          revokedAt: new Date(),
+        });
+        this.logger.log('Deactivated previous active API key during regeneration', {
+          previousKeyId: recentActive.id,
+          userId,
+        });
+      }
     }
 
-    const newKey = await this.createApiKey(userId, 'Regenerated API Key');
+    const newKey = await this.createApiKey(userId, preservedName, preservedExpiry);
 
     this.logger.log('Regenerated API key', {
       newKeyId: newKey.id,
