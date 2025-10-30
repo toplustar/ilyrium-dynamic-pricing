@@ -129,23 +129,49 @@ npm run build && npm run start:prod
 
 Global prefix: `/api`. Swagger: `/api-docs`.
 
-- Pricing
-  - `GET /api/prices` → current dynamic prices for all tiers
-- Purchase
-  - `POST /api/purchase` → buy a tier (see `BuyTierDto`)
-- Usage
-  - `GET /api/usuage` → usage/allocation by wallet (note path spelling)
-- Analytics
-  - `GET /api/analytics/current`
-  - `GET /api/analytics/historical?hours=24`
-  - `GET /api/analytics/node-usage`
-  - `GET /api/analytics/price-trend`
-  - `GET /api/analytics/revenue`
-  - `GET /api/analytics/user-stats`
-  - `GET /api/analytics/dashboard`
-  - `GET /api/analytics/price-demand-chart?hours=24&width=800&height=400`
-  - `GET /api/analytics/charts?hours=24`
-  - `GET /api/analytics/export/:format?hours=24` (json|csv)
+### ✅ Working Endpoints
+
+- **RPC Proxy**
+  - `POST /api/rpc` → Solana RPC requests (requires API key)
+- **Health Check**
+  - `GET /health` → system status and database connectivity
+- **Discord Bot**
+  - `GET /init-discord-channel` → initialize Discord purchase channel
+
+### 🔑 Using Your API Key
+
+After purchasing a tier, you'll receive an API key. Use it to make requests to the RPC server.
+
+**Available Methods:** See [Solana Vibe Station Documentation](https://docs.solanavibestation.com/developers) for complete list.
+
+**JavaScript:**
+
+```javascript
+const response = await fetch('http://localhost:3000/api/rpc', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-API-Key': 'your_api_key_here',
+  },
+  body: JSON.stringify({
+    jsonrpc: '2.0',
+    method: 'getBalance',
+    params: ['your_wallet_address'],
+    id: 1,
+  }),
+});
+
+const data = await response.json();
+```
+
+**cURL:**
+
+```bash
+curl -X POST http://localhost:3000/api/rpc \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your_api_key_here" \
+  -d '{"jsonrpc":"2.0","method":"getBalance","params":["your_wallet_address"],"id":1}'
+```
 
 Example WebSocket usage:
 
@@ -176,15 +202,6 @@ npm run lint
 npm run typecheck
 npm run build:strict
 ```
-
-## 📝 Notes
-
-- Endpoints and paths above reflect the current controllers:
-  - `PricingController` → `GET /api/prices`
-  - `PurchaseController` → `POST /api/purchase`
-  - `UsageController` → `GET /api/usuage` (intent likely `usage`)
-  - `AnalyticsController` → `/api/analytics/*`
-- Update `UsageController` path if you want `/api/usage` instead.
 
 ## 📄 License
 
