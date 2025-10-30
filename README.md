@@ -137,6 +137,9 @@ Global prefix: `/api`. Swagger: `/api-docs`.
   - `GET /health` → system status and database connectivity
 - **Discord Bot**
   - `GET /init-discord-channel` → initialize Discord purchase channel
+- **Analytics**
+- `GET /api/analytics/current` → current price, demand %, active users
+- `GET /api/analytics/price-demand-chart?hours=24&width=800&height=400` → chart URL JSON
 
 ### 🔑 Using Your API Key
 
