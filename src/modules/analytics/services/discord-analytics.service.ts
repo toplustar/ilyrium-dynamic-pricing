@@ -478,7 +478,7 @@ export class DiscordAnalyticsService implements OnModuleInit {
           },
           {
             name: '📈 Demand',
-            value: `${analytics.priceTrend.utilization.toFixed(1)}%`,
+            value: `${(analytics.priceTrend.utilization * 100).toFixed(1)}%`,
             inline: true,
           },
           {
@@ -530,7 +530,7 @@ export class DiscordAnalyticsService implements OnModuleInit {
         },
         {
           name: '📈 Demand',
-          value: `${analytics.priceTrend.utilization.toFixed(1)}%`,
+          value: `${(analytics.priceTrend.utilization * 100).toFixed(1)}%`,
           inline: true,
         },
         {
@@ -654,8 +654,10 @@ export class DiscordAnalyticsService implements OnModuleInit {
    * Calculate used node percentage based on RPS allocation vs capacity
    */
   private calculateUsedNodePercentage(nodeUsage: any): number {
-    const maxRpsCapacity = 1000;
-    return Math.min((nodeUsage.totalRpsAllocated / maxRpsCapacity) * 100, 100);
+    // Use the already computed utilizationPercentage from analytics to avoid drift
+    const value =
+      typeof nodeUsage?.utilizationPercentage === 'number' ? nodeUsage.utilizationPercentage : 0;
+    return Math.max(0, Math.min(value, 100));
   }
 
   private getTimeAgo(): string {

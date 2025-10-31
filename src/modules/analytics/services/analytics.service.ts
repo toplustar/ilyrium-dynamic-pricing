@@ -95,7 +95,12 @@ export class AnalyticsService implements OnModuleInit {
     const averageRps = totalRpsAllocated;
     const peakRps = totalRpsAllocated;
 
-    const utilizationPercentage = Math.min((totalRpsAllocated / 1000) * 100, 100);
+    // Use configured total RPS capacity from pricing engine instead of a hardcoded value
+    const totalRpsCapacity = this.pricingEngineService.getTotalRps();
+    const utilizationPercentage = Math.min(
+      totalRpsCapacity > 0 ? (totalRpsAllocated / totalRpsCapacity) * 100 : 0,
+      100,
+    );
 
     const tierStats = new Map<string, number>();
     activePurchases.forEach(p => {
